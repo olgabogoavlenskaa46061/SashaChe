@@ -1,0 +1,10 @@
+anthropic>=1.8
+feedparser>=6.0
+requests>=2.31
+edge-tts>=7.2
+gTTS>=2.5
+numpy>=1.26
+Pillow>=10.1
+python-dotenv>=1.0
+trafilatura>=2.0
+tzdata>=2024.1

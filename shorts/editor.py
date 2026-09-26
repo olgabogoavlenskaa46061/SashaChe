@@ -1,0 +1,328 @@
+"""Редакция: Claude выбирает темы дня и пишет сценарии роликов."""
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import config
+from .collector import NewsItem
+
+log = logging.getLogger(__name__)
+
+# Цены за 1 млн токенов (вход, выход) — только для примерной оценки в логе.
+_PRICES = {"claude-sonnet-5": (2.0, 10.0), "claude-haiku-4-5-20251001": (1.0, 5.0)}
+
+
+@dataclass
+class Selection:
+    item: NewsItem
+    category: str
+    why: str
+
+
+@dataclass
+class Script:
+    category: str
+    hook: str
+    text: str
+    title: str
+    description: str
+    hashtags: list[str]
+    footage_queries: list[str]
+    mood: str
+    sources: list[tuple[str, str]] = field(default_factory=list)  # (название, ссылка)
+    context: str = ""  # суть новости в двух словах — для того, кто читает текст
+
+    @property
+    def words(self) -> int:
+        return len(self.text.split())
+
+    def to_dict(self) -> dict:
+        return {k: getattr(self, k) for k in (
+            "category", "hook", "text", "title", "description", "hashtags",
+            "footage_queries", "mood", "sources", "context")}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Script":
+        data = dict(data)
+        data["sources"] = [tuple(s) for s in data.get("sources", [])]
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+
+
+class Editor:
+    def __init__(self, client=None, model: str | None = None):
+        if client is None:
+            import anthropic
+            if not config.ANTHROPIC_API_KEY:
+                raise RuntimeError("Не задан ANTHROPIC_API_KEY")
+            client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, max_retries=4, timeout=180)
+        self.client = client
+        self.model = model or config.CLAUDE_MODEL
+        self.tokens_in = 0
+        self.tokens_out = 0
+
+    # ── общий вызов ──────────────────────────────────────────────────────
+    def _ask(self, system: str, user: str, schema: dict, max_tokens: int = 3000) -> dict:
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+            output_config={"format": {"type": "json_schema", "schema": schema}},
+        )
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            self.tokens_in += getattr(usage, "input_tokens", 0) or 0
+            self.tokens_out += getattr(usage, "output_tokens", 0) or 0
+        if getattr(response, "stop_reason", None) == "refusal":
+            raise RuntimeError("Claude отказался отвечать на этот запрос")
+        text = "".join(getattr(block, "text", "") for block in response.content
+                       if getattr(block, "type", "") == "text")
+        return json.loads(text)
+
+    def cost_line(self) -> str:
+        price = _PRICES.get(self.model)
+        line = f"токены: {self.tokens_in} вход / {self.tokens_out} выход"
+        if price:
+            usd = self.tokens_in / 1e6 * price[0] + self.tokens_out / 1e6 * price[1]
+            line += f" ≈ ${usd:.3f}"
+        return line
+
+    # ── 1. Выбор тем ─────────────────────────────────────────────────────
+    def select(self, stories: list[NewsItem], mix: dict[str, int],
+               recent_titles: list[str], max_items: int = 320) -> list[Selection]:
+        tz = ZoneInfo(config.TIMEZONE)
+        by_id = {s.id: s for s in stories[:max_items]}
+        lines = []
+        for story in stories[:max_items]:
+            local = story.published.astimezone(tz)
+            src = ", ".join(story.sources)
+            count = f" ({len(story.sources)} ист.)" if len(story.sources) > 1 else ""
+            summary = f" — {story.summary[:200]}" if story.summary else ""
+            lines.append(f"[{story.id}] {local:%d.%m %H:%M} · {src}{count} · {story.title}{summary}")
+
+        wanted = "\n".join(
+            f"- {count} × «{name}»" for name, count in mix.items() if count > 0
+        )
+        total = sum(mix.values())
+        recent = "\n".join(f"- {t}" for t in recent_titles[-40:]) or "- (пока ничего)"
+
+        if config.VIDEO_STYLE == "sasha":
+            intro = (f"Ты — шеф-редактор футбольного канала «{config.CHANNEL_NAME}» с короткими вертикальными видео. "
+                     "Автор канала — Саша, болельщик и путешественник, который комментирует футбол своим голосом "
+                     "и с иронией. Каждый день ты выбираешь из ленты новостей за сутки темы для его шортсов. "
+                     "Лучше всего заходят темы, над которыми можно пошутить или о которых у болельщиков есть мнение: "
+                     "скандалы, решения судей, громкие заявления, нелепые ситуации, неожиданные цифры. "
+                     "Аудитория канала больше всего любит «Барселону» и «Реал», Месси и Роналду, Мбаппе, "
+                     "топ-клубы АПЛ и матчи сборных; российский футбол — только если история по-настоящему громкая.")
+        else:
+            intro = (f"Ты — шеф-редактор русскоязычного канала коротких вертикальных видео про футбол "
+                     f"«{config.CHANNEL_NAME}». Каждый день ты выбираешь из ленты новостей за сутки темы для шортсов "
+                     "(YouTube Shorts, TikTok, Reels).")
+        system = f"""{intro}
+
+Сегодня нужно выбрать {total} тем:
+{wanted}
+
+Что значат категории:
+- «главное» — самые громкие события дня: неожиданные результаты, крупные трансферы, отставки тренеров, скандалы, решения, которые обсуждает весь футбольный мир.
+- «курьёз» — смешное и нелепое: забавные ситуации на поле и вне поля, странные запреты и правила, розыгрыши, троллинг, нелепые ошибки, дерзкие или смешные цитаты, неожиданные поступки звёзд.
+- «интересное» — то, что удивляет: рекорды и необычная статистика, редкие факты, трогательные истории, неожиданные совпадения, «а вы знали».
+
+Как выбирать:
+- Думай как зритель, который листает ленту: остановится ли он на этом? Звёзды и топ-клубы, драма, неожиданность, эмоции, повод поспорить в комментариях.
+- Сюжет, о котором пишут несколько источников, обычно важнее. Английские источники тоже подходят — ролики будут на русском.
+- Курьёзы часто прячутся в цитатах и мелких заметках — ищи их по всей ленте, а не только наверху.
+- Не бери анонсы, трансляции, расписания, ставки, прогнозы и скучные «X прокомментировал Y» без изюминки.
+- Не бери смерти, тяжёлые болезни, реанимацию, насилие, войну и политику — эти темы не для лёгкого автоматического формата. Обычные спортивные травмы — можно, но не как курьёз.
+- Каждая тема — отдельный сюжет. Не бери две темы про одно и то же событие.
+- Не повторяй сюжеты, которые уже выходили в последние дни (список ниже). Вернуться к теме можно, только если случилось что-то новое и важное.
+- Если в какой-то категории нет достойных тем, возьми вместо неё сильную тему другой категории и укажи её настоящую категорию.
+
+Уже выходили:
+{recent}
+
+Верни темы в порядке от самой сильной к слабой. В поле id — ровно тот id, что в квадратных скобках."""
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "stories": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string", "description": "id сюжета из квадратных скобок"},
+                            "category": {"type": "string", "enum": list(config.CATEGORIES)},
+                            "why": {"type": "string", "description": "одна фраза: чем зацепит зрителя"},
+                        },
+                        "required": ["id", "category", "why"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["stories"],
+            "additionalProperties": False,
+        }
+        user = "Лента новостей за сутки (id · время по Москве · источники · заголовок — анонс):\n\n" + "\n".join(lines)
+        data = self._ask(system, user, schema, max_tokens=2500)
+
+        result: list[Selection] = []
+        used: set[str] = set()
+        for row in data.get("stories", []):
+            item = by_id.get(str(row.get("id", "")).strip("[] "))
+            if item is None or item.id in used:
+                continue
+            category = row.get("category") if row.get("category") in config.CATEGORIES else "главное"
+            result.append(Selection(item=item, category=category, why=row.get("why", "")))
+            used.add(item.id)
+            if len(result) >= total:
+                break
+        log.info("Выбрано тем: %d из %d", len(result), total)
+        return result
+
+    # ── 2. Сценарий ──────────────────────────────────────────────────────
+    def _sasha_prompt(self, category: str, reader: str) -> str:
+        tone = {
+            "главное": "уверенно и с долей сарказма — как болельщик, который всё видел и имеет своё мнение",
+            "курьёз": "с откровенной иронией, как будто сам еле сдерживаешь смех",
+            "интересное": "с удивлением и лёгкой усмешкой: «вы только посмотрите»",
+        }[category]
+        if reader == "human":
+            reader_line = "Текст Саша прочитает сам своим голосом."
+            reader_rules = ("- Цифры можно писать цифрами, счёт — как «2:1». В тексте без эмодзи, хештегов и скобок.\n"
+                            "- Пиши так, чтобы легко читалось вслух с первого раза: без длинных имён подряд и "
+                            "труднопроизносимых оборотов.")
+        else:
+            reader_line = "Текст прочитает синтезатор речи."
+            reader_rules = ("- Текст читает синтезатор: числа, счёт и даты пиши словами («два — один», «сто четырнадцать»), "
+                            "без сокращений («Лига чемпионов», а не «ЛЧ»), без эмодзи, хештегов и скобок.")
+        return f"""Ты пишешь тексты для коротких видео футбольного канала «{config.CHANNEL_NAME}». Автор — Саша, болельщик, который ездит на матчи и комментирует футбол с иронией. {reader_line} Поверх пойдут кадры со стадиона без надписей, в конце — замедленный повтор.
+
+Как звучит Саша:
+- Живая разговорная речь, как будто рассказываешь другу на трибуне. Можно «ну», «вот», «а какие варианты», но без перебора.
+- Ирония и сарказм — главный приём: подколоть можно клубы, тренеров, судей, функционеров. Без оскорблений, мата и насмешек над внешностью, национальностью, травмами и бедой.
+- Начинай сразу с сути или с подколки, привязанной к горячей теме. Никаких «Привет», «Сегодня», «Друзья», «В этом видео».
+- Заканчивай ироничной развязкой или колкой фразой. Без «подписывайтесь» и «пишите в комментариях».
+- {config.SCRIPT_MIN_WORDS}–{config.SCRIPT_MAX_WORDS} слов (20–25 секунд), короткие предложения.
+- Тон для этой темы: {tone}.
+
+Факты:
+- Только из присланных материалов. Ничего не выдумывай: ни цифр, ни цитат, ни деталей, ни причин. Слухи подавай как слухи («пишут, что…», «по данным…»).
+- Своими словами, не копируй фразы из статей.
+- Имена, клубы и турниры — как принято в русских спортивных СМИ, иностранные издания — по-русски («Экип», «Би-би-си»).
+{reader_rules}
+
+Остальные поля:
+- context — 1–2 нейтральных предложения о том, что случилось, чтобы Саша понимал, о чём читает.
+- hook — тема в 2–5 словах (для подписи и имени файла), без точки.
+- title — название ролика в стиле канала: 1–3 слова с иронией, с маленькой буквы, без эмодзи и точки (например: «ни стыда», «сам виноват», «лучше переплатить», «гении», «что-то не так»).
+- description — 1–2 предложения под видео, в конце «Источник: …» с названиями изданий.
+- hashtags — 4–6 хештегов без пробелов, строчными: первым #футбол, дальше клубы, игроки и турнир (например: #барселона #лалига #реалмадрид #мбаппе).
+- footage_queries — 3 коротких запроса НА АНГЛИЙСКОМ для стоковых видео, как будто снято болельщиком с трибуны: стадион, трибуны, фанаты, игроки на поле издалека (например: "football stadium crowd from stands", "soccer match stadium night", "football fans cheering stands"). Без имён людей, клубов и брендов.
+- mood — настроение (пригодится, если добавите музыку)."""
+
+    def _news_prompt(self, category: str) -> str:
+        tone = {
+            "главное": "энергично и чётко, как спортивный ведущий, который сообщает главную новость дня",
+            "курьёз": "с иронией и лёгким юмором, как друг, который пересказывает смешную историю; без оскорблений и насмешек над внешностью, происхождением или бедой",
+            "интересное": "с искренним удивлением, как будто делишься фактом, от которого у тебя самого отвисла челюсть",
+        }[category]
+        return f"""Ты пишешь сценарии для футбольных шортсов на русском языке. Текст прочитает синтезатор речи, поверх пойдут крупные субтитры, фоном — нейтральные стоковые кадры.
+
+Правила сценария:
+1. Длина — {config.SCRIPT_MIN_WORDS}–{config.SCRIPT_MAX_WORDS} слов.
+2. Первая фраза — крючок до 10 слов: самый неожиданный факт, интрига или вопрос. Не начинай с «Привет», «Сегодня», «Итак», «Друзья».
+3. Дальше — суть коротко и живо: кто, что случилось, почему это важно или смешно. Предложения короткие, до 15 слов.
+4. Финал — вопрос к зрителю или колкая фраза, чтобы захотелось написать комментарий.
+5. Тон: {tone}.
+6. Только факты из присланных материалов. Ничего не выдумывай: ни цифр, ни цитат, ни деталей, ни причин. Если материалов мало — пиши короче, но не фантазируй. Слухи и инсайды подавай как слухи («по данным…», «как пишет…»).
+7. Пересказывай своими словами, не копируй фразы из статей. Цитаты — только очень короткие, лучше передай смысл.
+8. Имена, клубы и турниры — в привычном для русских спортивных СМИ написании. Иностранные названия СМИ пиши по-русски («Экип», «Би-би-си»).
+9. Текст читает синтезатор: все числа, счёт и даты пиши словами («два — один», «сорок один год», «сто четырнадцать»). Без сокращений («Лига чемпионов», а не «ЛЧ»), без эмодзи, хештегов, скобок и списков.
+
+Остальные поля:
+- context — 1–2 нейтральных предложения о том, что случилось.
+- hook — надпись на экране, 2–5 слов, можно цифры и восклицание, без точки в конце. Она должна интриговать, но не врать.
+- title — заголовок для публикации, до 80 символов, можно один эмодзи.
+- description — 1–2 предложения для описания под видео и в конце «Источник: …» с названиями изданий.
+- hashtags — 5–8 хештегов без пробелов: #футбол, #shorts и теги по теме (клуб, игрок, турнир).
+- footage_queries — 3 коротких запроса НА АНГЛИЙСКОМ для поиска бесплатных стоковых видео под настроение сюжета (например: "soccer stadium night crowd", "barber shop haircut", "football on grass slow motion"). Без имён людей, клубов и брендов.
+- mood — настроение музыки."""
+
+    def write_script(self, selection: Selection, material: str, today: str, reader: str | None = None) -> Script:
+        """reader: human — текст читает Саша; tts — синтезатор речи."""
+        reader = reader or ("human" if config.VOICE_MODE == "human" else "tts")
+        if config.VIDEO_STYLE == "sasha":
+            system = self._sasha_prompt(selection.category, reader)
+        else:
+            system = self._news_prompt(selection.category)
+
+        user = f"""Дата: {today}
+Категория: {selection.category}
+Почему выбрали тему: {selection.why}
+
+Материалы:
+{material}"""
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "context": {"type": "string"},
+                "hook": {"type": "string"},
+                "script": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "hashtags": {"type": "array", "items": {"type": "string"}},
+                "footage_queries": {"type": "array", "items": {"type": "string"}},
+                "mood": {"type": "string", "enum": ["энергично", "весело", "драматично", "вдохновляюще"]},
+            },
+            "required": ["context", "hook", "script", "title", "description", "hashtags", "footage_queries", "mood"],
+            "additionalProperties": False,
+        }
+        data = self._ask(system, user, schema, max_tokens=2000)
+
+        # Слишком длинный текст — просим сократить один раз.
+        if len(data["script"].split()) > config.SCRIPT_MAX_WORDS * 1.3:
+            log.info("Сценарий длинный (%d слов), сокращаю", len(data["script"].split()))
+            shorter = self._ask(
+                system,
+                user + "\n\nЧерновик получился слишком длинным. Вот он:\n" + data["script"]
+                + f"\n\nСократи до {config.SCRIPT_MAX_WORDS} слов, сохранив начало, главные факты и финальную фразу.",
+                schema, max_tokens=2000,
+            )
+            data = shorter
+
+        hashtags = []
+        for tag in data.get("hashtags", []):
+            tag = "#" + tag.strip().lstrip("#").replace(" ", "")
+            if len(tag) > 1 and tag.lower() not in {h.lower() for h in hashtags}:
+                hashtags.append(tag)
+
+        sources = []
+        for item in selection.item.all_items[:4]:
+            if (item.source, item.link) not in sources:
+                sources.append((item.source, item.link))
+
+        return Script(
+            category=selection.category,
+            hook=data["hook"].strip().rstrip("."),
+            text=data["script"].strip(),
+            title=data["title"].strip(),
+            description=data["description"].strip(),
+            hashtags=hashtags[:8],
+            footage_queries=[q for q in data.get("footage_queries", []) if q.strip()][:4],
+            mood=data.get("mood", "энергично"),
+            sources=sources,
+            context=data.get("context", "").strip(),
+        )
+
+
+def today_label() -> str:
+    months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
+              "августа", "сентября", "октября", "ноября", "декабря"]
+    now = datetime.now(ZoneInfo(config.TIMEZONE))
+    return f"{now.day} {months[now.month - 1]} {now.year}"

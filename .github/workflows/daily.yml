@@ -1,0 +1,74 @@
+name: Тексты на день
+
+on:
+  schedule:
+    # Каждый день в 09:23 UTC = 12:23 по Москве = 06:23 в Жуан-Песоа.
+    # Время указывается по UTC. Подобрать другое: https://crontab.guru
+    - cron: "23 9 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Сколько тем взять (0 — как в настройках)"
+        default: "0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sashache-bot
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Скачать код
+        uses: actions/checkout@v7
+
+      - name: Установить Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Установить ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Установить библиотеки
+        run: pip install -r requirements.txt
+
+      - name: Выбрать темы и прислать тексты (или готовые ролики)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          VOICE_MODE: ${{ vars.VOICE_MODE }}
+          VIDEO_STYLE: ${{ vars.VIDEO_STYLE }}
+          SUBTITLES: ${{ vars.SUBTITLES }}
+          SHORTS_MIX: ${{ vars.SHORTS_MIX }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          TTS_VOICE: ${{ vars.TTS_VOICE }}
+          CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
+          LIMIT: ${{ github.event.inputs.limit || '0' }}
+        run: python main.py --limit "$LIMIT"
+
+      - name: Запомнить темы
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.json data/pending.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "Темы на $(date -u +%F)"
+          git pull --rebase --autostash -q || true
+          git push || echo "Сохранить не удалось — на тексты это не влияет"
+
+      - name: Сохранить результат на 7 дней (Summary → Artifacts)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: day-${{ github.run_number }}
+          path: output/
+          retention-days: 7
+          if-no-files-found: ignore
