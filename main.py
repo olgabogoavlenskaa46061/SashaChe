@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import shutil
 import sys
 import time
@@ -26,7 +27,7 @@ from zoneinfo import ZoneInfo
 import config
 from shorts import articles, collector, footage, history, inbox, pending, render, voice
 from shorts import editor as editor_mod
-from shorts.telegram import EMOJI, Telegram, script_message, video_caption
+from shorts.telegram import EMOJI, Telegram, announce_chat_ids, script_message, video_caption
 from shorts.textutil import slugify, tg_escape
 
 log = logging.getLogger("shorts")
@@ -39,12 +40,40 @@ def setup_logging() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
+def github_summary(text: str) -> None:
+    """Пометка на странице запуска в GitHub Actions (блок Summary) — видно без чтения логов."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(text.rstrip() + "\n")
+    except OSError:
+        pass
+
+
+def _annotation(level: str, title: str, message: str) -> None:
+    """Сообщение в блоке Annotations на странице запуска в GitHub Actions."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        text = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::{level} title={title}::{text}", flush=True)
+
+
+def github_error(message: str) -> None:
+    """Причина ошибки — сразу на странице запуска: в Annotations и в Summary."""
+    message = _hide_keys(message)
+    _annotation("error", "Бот остановился", message)
+    github_summary(f"❌ {message}")
+
+
 def check_setup(need_claude: bool, need_telegram: bool, need_video: bool = True) -> None:
     problems = []
     if need_claude and not config.ANTHROPIC_API_KEY:
-        problems.append("нет ключа ANTHROPIC_API_KEY")
-    if need_telegram and not (config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID):
-        problems.append("нет TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID")
+        problems.append("нет секрета ANTHROPIC_API_KEY")
+    if need_telegram and not config.TELEGRAM_BOT_TOKEN:
+        problems.append("нет секрета TELEGRAM_BOT_TOKEN")
+    elif need_telegram and not config.TELEGRAM_CHAT_ID:
+        problems.append("нет секрета TELEGRAM_CHAT_ID")
     if need_video:
         for tool in ("ffmpeg", "ffprobe"):
             if not shutil.which(tool):
@@ -54,6 +83,21 @@ def check_setup(need_claude: bool, need_telegram: bool, need_video: bool = True)
                 problems.append(f"нет шрифта {f.name}")
     if problems:
         raise SystemExit("Не хватает настроек: " + "; ".join(problems) + ". Смотрите README.md.")
+
+
+def first_contact() -> int:
+    """Номера чата ещё нет: бот сам присылает его во все чаты, где ему писали."""
+    username, chats = announce_chat_ids()
+    if not chats:
+        raise SystemExit(f"Номера чата пока нет, а бот @{username} не видит ни одного чата. Добавьте бота "
+                         f"в группу с Сашей, напишите там /start@{username} и запустите ещё раз.")
+    names = ", ".join(f"«{c.get('title') or 'личный чат'}»" for c in chats)
+    message = (f"Бот прислал номер чата в Telegram ({names}). Добавьте этот номер в GitHub "
+               "секретом TELEGRAM_CHAT_ID и запустите ещё раз.")
+    log.info(message)
+    _annotation("notice", "Номер чата", message)
+    github_summary(f"👋 {message}")
+    return 0
 
 
 def cleanup(days: int = 7) -> None:
@@ -91,11 +135,20 @@ def broken_sources(report: dict) -> list[str]:
     return [f"• {tg_escape(f'{k}: {v}'[:150])}" for k, v in report.items() if v.startswith("ошибка")]
 
 
+def _hide_keys(text: str) -> str:
+    for secret in (config.TELEGRAM_BOT_TOKEN, config.ANTHROPIC_API_KEY, config.PEXELS_API_KEY):
+        if secret:
+            text = text.replace(secret, "***")
+    return text
+
+
 def notify_error(telegram: Telegram | None, what: str, error: Exception) -> None:
     log.exception("Бот остановился с ошибкой")
+    details = _hide_keys(str(error))
+    github_error(f"{what}: {type(error).__name__}: {details[:800]}")
     if telegram:
         try:
-            telegram.send_message(f"⚠️ {what}:\n<code>{tg_escape(str(error))[:3000]}</code>")
+            telegram.send_message(f"⚠️ {what}:\n<code>{tg_escape(details)[:3000]}</code>")
         except Exception:
             log.exception("Не удалось отправить сообщение об ошибке")
 
@@ -292,8 +345,24 @@ def main() -> int:
     command = "demo" if args.demo else args.command
     if command == "daily":
         command = "scripts" if config.VOICE_MODE == "human" else "auto"
+    wants_telegram = not args.dry_run and (command != "demo" or args.send)
+    if wants_telegram and config.TELEGRAM_BOT_TOKEN and not config.TELEGRAM_CHAT_ID:
+        return first_contact()
     return {"scripts": run_scripts, "inbox": run_inbox, "auto": run_auto, "demo": demo}[command](args)
 
 
+def run() -> int:
+    """main() + причина любой остановки на странице запуска в GitHub."""
+    try:
+        return main()
+    except SystemExit as stop:
+        if isinstance(stop.code, str):
+            github_error(stop.code)
+        raise
+    except Exception as error:
+        github_error(f"{type(error).__name__}: {error}")
+        raise
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

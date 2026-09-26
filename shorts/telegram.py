@@ -33,18 +33,38 @@ class Telegram:
                 payload = response.json()
                 if payload.get("ok"):
                     return payload["result"]
-                retry = (payload.get("parameters") or {}).get("retry_after")
-                if retry:
-                    time.sleep(int(retry) + 1)
+                params = payload.get("parameters") or {}
+                if params.get("retry_after"):
+                    last_error = payload.get("description", "слишком много запросов")
+                    time.sleep(int(params["retry_after"]) + 1)
+                    continue
+                new_chat = params.get("migrate_to_chat_id")
+                if new_chat and str(data.get("chat_id")) == str(self.chat_id):
+                    self._chat_migrated(new_chat)
+                    data["chat_id"] = self.chat_id
+                    _rewind(files)
                     continue
                 raise RuntimeError(payload.get("description", "неизвестная ошибка Telegram"))
             except (requests.RequestException, ValueError) as error:
                 last_error = error
                 time.sleep(5 * (attempt + 1))
-                if files:  # файлы нужно перемотать для повторной попытки
-                    for f in files.values():
-                        f[1].seek(0)
+                _rewind(files)  # файлы нужно перемотать для повторной попытки
         raise RuntimeError(f"Telegram {method}: {last_error}")
+
+    def _chat_migrated(self, new_chat) -> None:
+        """Группа превратилась в супергруппу, и у неё сменился номер: пишем по новому и подсказываем."""
+        self.chat_id = str(new_chat)
+        log.warning("Группа стала супергруппой, у неё новый номер — замените секрет TELEGRAM_CHAT_ID")
+        note = ("ℹ️ Эта группа стала супергруппой, и у неё сменился номер:\n"
+                f"<code>{self.chat_id}</code>\n\n"
+                "Замените в GitHub секрет <b>TELEGRAM_CHAT_ID</b> на этот номер: Settings → "
+                "Secrets and variables → Actions → карандаш рядом с TELEGRAM_CHAT_ID. "
+                "Пока там старый номер, бот не видит голосовые.")
+        try:
+            requests.post(self.api + "sendMessage", timeout=30,
+                          data={"chat_id": self.chat_id, "text": note, "parse_mode": "HTML"})
+        except requests.RequestException:
+            log.warning("Не удалось отправить подсказку про новый номер чата")
 
     def _silent(self) -> str:
         return "true" if config.TELEGRAM_SILENT else "false"
@@ -90,6 +110,57 @@ class Telegram:
         response.raise_for_status()
         dest.write_bytes(response.content)
         return dest
+
+
+def _rewind(files: dict | None) -> None:
+    for f in (files or {}).values():
+        f[1].seek(0)
+
+
+def announce_chat_ids(token: str | None = None) -> tuple[str, list[dict]]:
+    """Первый запуск, номера чата ещё нет в настройках.
+
+    Находит чаты, где боту писали за последние сутки, и присылает в каждый его номер —
+    искать номер вручную не нужно. Возвращает адрес бота и чаты, куда удалось написать.
+    """
+    api = f"https://api.telegram.org/bot{token or config.TELEGRAM_BOT_TOKEN}/"
+
+    def call(method: str, **data):
+        payload = requests.post(api + method, data=data, timeout=30).json()
+        if not payload.get("ok"):
+            raise RuntimeError(payload.get("description", "ошибка Telegram"))
+        return payload["result"]
+
+    try:
+        username = call("getMe").get("username", "")
+    except (requests.RequestException, ValueError, RuntimeError) as error:
+        raise SystemExit(f"Токен бота не подходит ({error}). Проверьте секрет TELEGRAM_BOT_TOKEN: "
+                         "его нужно скопировать из сообщения @BotFather целиком.")
+    updates = call("getUpdates", timeout=0, limit=100,
+                   allowed_updates=json.dumps(["message", "my_chat_member"]))
+    chats: dict = {}
+    for update in updates:
+        for key in ("message", "edited_message", "my_chat_member"):
+            chat = (update.get(key) or {}).get("chat") or {}
+            if chat.get("type") in ("private", "group", "supergroup"):
+                chats[chat["id"]] = chat
+
+    sent = []
+    for chat_id, chat in chats.items():
+        text = (f"👋 Бот канала «{tg_escape(config.CHANNEL_NAME)}» на связи!\n\n"
+                f"Номер этого чата: <code>{chat_id}</code>\n"
+                "(нажмите на номер — он скопируется)\n\n"
+                "Что дальше:\n"
+                "1. В GitHub откройте репозиторий → Settings → Secrets and variables → Actions → "
+                "New repository secret.\n"
+                "2. Name: <code>TELEGRAM_CHAT_ID</code>, Secret: номер выше → Add secret.\n"
+                "3. Снова запустите «Тексты на день» — тексты придут сюда.")
+        try:
+            call("sendMessage", chat_id=chat_id, text=text, parse_mode="HTML")
+            sent.append(chat)
+        except (requests.RequestException, ValueError, RuntimeError) as error:
+            log.warning("Не удалось написать в чат «%s»: %s", chat.get("title") or "личный чат", error)
+    return username, sent
 
 
 def voice_of(message: dict) -> dict | None:
