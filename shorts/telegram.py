@@ -87,6 +87,10 @@ class Telegram:
         with open(path, "rb") as video:
             return self._call("sendVideo", data, files={"video": (path.name, video, "video/mp4")}, timeout=600)
 
+    def get_chat(self) -> dict:
+        """Проверка, что бот может писать в чат из настроек."""
+        return self._call("getChat", {"chat_id": self.chat_id})
+
     # ── входящие ─────────────────────────────────────────────────────────
     def get_updates(self, offset: int | None = None) -> list[dict]:
         data = {"timeout": 0, "limit": 100, "allowed_updates": json.dumps(["message"])}

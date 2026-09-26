@@ -45,12 +45,14 @@ def main() -> None:
         return
 
     relevant = False
+    foreign = False
     for update in updates:
         message = update.get("message") or {}
         chat_info = message.get("chat") or {}
         ours = str(chat_info.get("id")) == chat or (
             chat_info.get("username") and chat.lstrip("@").lower() == chat_info["username"].lower())
         if not ours:
+            foreign = True
             continue
         document = message.get("document") or {}
         has_voice = any(message.get(k) for k in ("voice", "audio", "video_note")) or \
@@ -60,7 +62,9 @@ def main() -> None:
             relevant = True
             break
 
-    if updates and not relevant:
+    # Сообщения из других чатов не трогаем: если номер чата в настройках неверный,
+    # по ним бот подскажет правильный. Через сутки Telegram удалит их сам.
+    if updates and not relevant and not foreign:
         call(token, "getUpdates", offset=max(u["update_id"] for u in updates) + 1, timeout=0)
     print(f"work={'true' if relevant else 'false'}")
 

@@ -174,6 +174,59 @@ def _explain(error: Exception, details: str) -> str:
     return ""
 
 
+def telegram_problem() -> str | None:
+    """Может ли бот писать в чат из TELEGRAM_CHAT_ID. Если нет — сам присылает правильный номер."""
+    try:
+        Telegram().get_chat()
+        return None
+    except Exception as error:
+        text = _hide_keys(str(error))
+    low = text.lower()
+    if low in ("unauthorized", "not found"):
+        return ("Токен бота не подходит — проверьте секрет TELEGRAM_BOT_TOKEN: "
+                "скопируйте его из сообщения @BotFather целиком.")
+    if not ("chat not found" in low or "forbidden" in low or "chat_id" in low):
+        return f"Telegram не ответил: {text}."
+    try:
+        username, chats = announce_chat_ids()
+    except (SystemExit, Exception) as error:
+        return f"Номер в секрете TELEGRAM_CHAT_ID не подходит (Telegram: {text}); подсказать номер не вышло: {error}."
+    if chats:
+        where = ", ".join(f"«{c.get('title') or 'личный чат'}»" for c in chats)
+        return (f"Номер в секрете TELEGRAM_CHAT_ID не подходит (Telegram: {text}). Бот прислал правильный "
+                f"номер в Telegram ({where}) — замените им секрет TELEGRAM_CHAT_ID (карандаш рядом с ним) "
+                "и запустите ещё раз.")
+    return (f"Номер в секрете TELEGRAM_CHAT_ID не подходит (Telegram: {text}). Добавьте бота @{username} "
+            f"в группу и напишите там /start@{username} (или откройте бота и нажмите «Запустить»), "
+            "затем запустите ещё раз — бот пришлёт правильный номер.")
+
+
+def claude_problem() -> str | None:
+    """Принимает ли Claude ключ — за секунду и без расхода токенов."""
+    try:
+        editor_mod.Editor().check_key()
+        return None
+    except Exception as error:
+        details = _hide_keys(str(error))
+        return (_explain(error, details).strip()
+                or f"Claude не ответил: {type(error).__name__}: {details[:300]}.")
+
+
+def preflight(need_claude: bool, need_telegram: bool) -> None:
+    """Проверка ключей до сбора новостей: все проблемы сразу и понятными словами."""
+    tg_problem = telegram_problem() if need_telegram else None
+    ai_problem = claude_problem() if need_claude else None
+    problems = [p for p in (tg_problem, ai_problem) if p]
+    if not problems:
+        return
+    if need_telegram and not tg_problem:  # Telegram работает — сообщим и туда
+        try:
+            Telegram().send_message("⚠️ Бот не запустился:\n" + tg_escape(" ".join(problems)))
+        except Exception:
+            log.exception("Не удалось отправить сообщение об ошибке")
+    raise SystemExit(" ".join(problems))
+
+
 def notify_error(telegram: Telegram | None, what: str, error: Exception) -> None:
     log.exception("Бот остановился с ошибкой")
     details = _hide_keys(str(error))
@@ -192,6 +245,7 @@ def notify_error(telegram: Telegram | None, what: str, error: Exception) -> None
 # ─── тексты для Саши ─────────────────────────────────────────────────────
 def run_scripts(args) -> int:
     check_setup(need_claude=True, need_telegram=not args.dry_run, need_video=False)
+    preflight(need_claude=True, need_telegram=not args.dry_run)
     now = datetime.now(ZoneInfo(config.TIMEZONE))
     today_text = editor_mod.today_label()
     telegram = None if args.dry_run else Telegram()
@@ -248,6 +302,7 @@ def run_scripts(args) -> int:
 
 def run_inbox(args) -> int:
     check_setup(need_claude=False, need_telegram=True)
+    preflight(need_claude=False, need_telegram=True)
     cleanup()
     telegram = Telegram()
     try:
@@ -289,6 +344,7 @@ def make_short(ed: editor_mod.Editor, selection, number: int, day_dir: Path, his
 
 def run_auto(args) -> int:
     check_setup(need_claude=True, need_telegram=not args.dry_run)
+    preflight(need_claude=True, need_telegram=not args.dry_run)
     cleanup()
     now = datetime.now(ZoneInfo(config.TIMEZONE))
     date_label = now.strftime("%d.%m")

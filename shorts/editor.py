@@ -64,6 +64,10 @@ class Editor:
         self.tokens_in = 0
         self.tokens_out = 0
 
+    def check_key(self) -> None:
+        """Быстрая проверка ключа без расхода токенов."""
+        self.client.models.list(limit=1)
+
     # ── общий вызов ──────────────────────────────────────────────────────
     def _ask(self, system: str, user: str, schema: dict, max_tokens: int = 3000) -> dict:
         response = self.client.messages.create(
