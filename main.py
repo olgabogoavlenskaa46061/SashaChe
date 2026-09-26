@@ -142,15 +142,51 @@ def _hide_keys(text: str) -> str:
     return text
 
 
+def claude_key_problem(key: str | None) -> str | None:
+    """Что не так с ключом Claude — по его виду, не показывая сам ключ."""
+    if not key:
+        return "секрет ANTHROPIC_API_KEY пустой"
+    if key[0] in "\"'«`" or key.upper().startswith("ANTHROPIC") or "=" in key[:30]:
+        return "в секрет попало лишнее: вставьте только сам ключ, без кавычек и без «ANTHROPIC_API_KEY=»"
+    if any(ch.isspace() for ch in key):
+        return "внутри ключа есть пробел или перенос строки — скопируйте ключ заново одной строкой"
+    if key.startswith("sk-ant-api"):
+        return "ключ короче обычного — похоже, скопирован не целиком" if len(key) < 80 else None
+    if key.startswith(("sk-ant-oat", "sk-ant-sid", "sk-ant-ort")):
+        return ("это токен подписки Claude, а нужен ключ API из кабинета platform.claude.com "
+                "(начинается с sk-ant-api)")
+    if key.startswith("sk-ant-admin"):
+        return "это админ-ключ, а нужен обычный ключ API (начинается с sk-ant-api)"
+    if key.startswith("sk-"):
+        return "это ключ другого сервиса (например, ChatGPT), а нужен ключ Claude — он начинается с sk-ant-api"
+    return "это не похоже на ключ Claude API — он начинается с sk-ant-api"
+
+
+def _explain(error: Exception, details: str) -> str:
+    """Понятная подсказка к частым ошибкам."""
+    if type(error).__name__ == "AuthenticationError" or "authentication_error" in details:
+        problem = claude_key_problem(config.ANTHROPIC_API_KEY)
+        return ("Claude не принял ключ ANTHROPIC_API_KEY: "
+                + (problem or "по виду ключ правильный — возможно, его удалили в кабинете; создайте новый")
+                + ". ")
+    if "credit balance" in details.lower():
+        return "На счёте Claude API кончились деньги — пополните баланс на platform.claude.com (Billing). "
+    return ""
+
+
 def notify_error(telegram: Telegram | None, what: str, error: Exception) -> None:
     log.exception("Бот остановился с ошибкой")
     details = _hide_keys(str(error))
-    github_error(f"{what}: {type(error).__name__}: {details[:800]}")
+    hint = _explain(error, details)
+    github_error(f"{what}: {hint}{type(error).__name__}: {details[:800]}")
     if telegram:
         try:
-            telegram.send_message(f"⚠️ {what}:\n<code>{tg_escape(details)[:3000]}</code>")
-        except Exception:
+            telegram.send_message(f"⚠️ {what}:\n{tg_escape(hint)}\n<code>{tg_escape(details)[:3000]}</code>")
+        except Exception as send_error:
             log.exception("Не удалось отправить сообщение об ошибке")
+            _annotation("warning", "Telegram не ответил",
+                        _hide_keys(f"Сообщение об ошибке не дошло до Telegram: "
+                                   f"{type(send_error).__name__}: {send_error}")[:500])
 
 
 # ─── тексты для Саши ─────────────────────────────────────────────────────
