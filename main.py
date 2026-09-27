@@ -28,7 +28,7 @@ import config
 from shorts import articles, collector, footage, history, inbox, pending, render, trends, voice
 from shorts import editor as editor_mod
 from shorts.telegram import EMOJI, Telegram, announce_chat_ids, script_message, video_caption
-from shorts.textutil import slugify, tg_escape
+from shorts.textutil import one_line, slugify, tg_escape
 
 log = logging.getLogger("shorts")
 
@@ -129,6 +129,11 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
                     mix[name] += 1
     popular, popular_report = trends.collect()
     report.update(popular_report)
+    for name, state in popular_report.items():  # видно на странице запуска в GitHub
+        if state.startswith("ошибка"):
+            _annotation("warning", name, state)
+        else:
+            github_summary(f"📈 {name}: {state}")
     selections = ed.select(stories, mix, history.recent_titles(hist), trends=popular)
     if not selections:
         raise RuntimeError("Claude не выбрал ни одной темы")
@@ -143,6 +148,11 @@ def popular_summary(report: dict) -> str:
     """«📈 Популярное за сутки: YouTube — видео: 30; X — постов прочитано: 100 ≈ $0.50»."""
     parts = [f"{k} — {v}" for k, v in report.items() if k in ("YouTube", "X") and not v.startswith("ошибка")]
     return "📈 Популярное за сутки: " + "; ".join(parts) if parts else ""
+
+
+def topic_memo(script) -> str:
+    """Как тема запоминается в истории: суть, а не ироничное название — чтобы не повторяться."""
+    return f"{script.hook} — {one_line(script.context)[:160]}" if script.context else script.hook
 
 
 def with_popularity(material: str, selection) -> str:
@@ -305,7 +315,7 @@ def run_scripts(args) -> int:
                 pending.add(data, sent["message_id"], number, script.to_dict(), links)
             preview.append(f"## {number}. {script.hook} ({script.category})\n\n{script.context}\n\n"
                            f"{script.text}\n\nНазвание: {script.title} {' '.join(script.hashtags)}\n")
-            history.remember(hist, script.title, selection.category, links, [])
+            history.remember(hist, topic_memo(script), selection.category, links, [])
 
         day_dir = config.OUTPUT_DIR / now.strftime("%Y-%m-%d")
         day_dir.mkdir(parents=True, exist_ok=True)
@@ -387,7 +397,7 @@ def run_auto(args) -> int:
                 result = make_short(ed, selection, number, day_dir, hist, date_label, today_text,
                                     seed=seed_base + number)
                 results.append(result)
-                history.remember(hist, result["script"].title, selection.category,
+                history.remember(hist, topic_memo(result["script"]), selection.category,
                                  [i.link for i in selection.item.all_items], result["footage_ids"])
             except Exception as error:
                 log.exception("Ролик %d не получился", number)
