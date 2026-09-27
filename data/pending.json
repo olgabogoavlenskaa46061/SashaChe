@@ -580,6 +580,185 @@
     "https://x.com/i/web/status/2103832289750970736"
    ],
    "videos": []
+  },
+  {
+   "id": "20260927-1",
+   "date": "2026-09-27",
+   "created": "2026-09-27T05:27+03:00",
+   "number": 1,
+   "message_id": 33,
+   "status": "waiting",
+   "script": {
+    "category": "главное",
+    "hook": "Верон гонится за судьёй",
+    "text": "Что нужно сделать судье, чтобы один человек сначала аплодировал ему, а через час гонялся за ним по полю? Президент «Эстудиантес» Верон хлопал арбитру за пенальти в пользу «Росарио Сентраль». Ди Мария сравнял счёт, но Сентраль выиграл финал Суперкубка 3:1. Игроки «Эстудиантес» вежливо пожали судьям руки, а Верон рванул к арбитру через газон. Ответ прост: поражение превращает аплодисменты в охоту на человека в чёрном.",
+    "title": "аплодисменты закончились",
+    "description": "Президент «Эстудиантес» Верон сначала хлопал арбитру за пенальти, а после финального поражения от «Росарио Сентраль» устроил ему разбор на поле. Источник: X.",
+    "hashtags": [
+     "#футбол",
+     "#эстудиантес",
+     "#росариосентраль",
+     "#верон",
+     "#суперкубокаргентины",
+     "#димария"
+    ],
+    "footage_queries": [
+     "football stadium crowd from stands",
+     "soccer players arguing on pitch",
+     "football fans cheering stadium night"
+    ],
+    "mood": "драматично",
+    "sources": [
+     [
+      "X",
+      "https://x.com/i/web/status/2103958911451558395"
+     ]
+    ],
+    "context": "На финале Суперкубка Аргентины президент «Эстудиантес» Хуан Себастьян Верон во время матча аплодировал арбитру Дарио Эррере за назначенный пенальти в пользу «Росарио Сентраль», а после финального свистка бросился к тому же судье через поле, явно недовольный итогом встречи, в которой «Сентраль» победил 3:1.",
+    "popular": [
+     {
+      "id": "t14",
+      "platform": "X",
+      "title": "¡JUAN SEBASTIÁN VERÓN MUY ENOJADO TRAS EL FINAL FUE A BUSCAR A DARÍO HERRERA! 📺 La #SupercopaInternacional 🏆, por ESPN en el Plan Premium de #DisneyPlus",
+      "url": "https://x.com/i/web/status/2103958911451558395",
+      "views": 794982,
+      "likes": 1555,
+      "author": "",
+      "published": "2026-09-26T21:24:28.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103958875019919360/vid/avc1/1280x720/JoUeOVZxCIXnnFAF.mp4?tag=16",
+      "duration": 22.2,
+      "description": ""
+     },
+     {
+      "id": "t23",
+      "platform": "X",
+      "title": "¡¡TOMÁS PALACIOS FUE A BUSCAR A JORGE ALMIRÓN Y LE DIJO DE TODO CARA A CARA TRAS EL 3-1 DE CENTRAL VS. ESTUDIANTES!!",
+      "url": "https://x.com/i/web/status/2103962184459903305",
+      "views": 659566,
+      "likes": 2289,
+      "author": "",
+      "published": "2026-09-26T21:37:29.000Z",
+      "video_url": "https://video.twimg.com/ext_tw_video/2103962104025767936/pu/vid/avc1/720x1280/MpsQYkQFFcX_PKH5.mp4?tag=12",
+      "duration": 42.4,
+      "description": ""
+     },
+     {
+      "id": "t26",
+      "platform": "X",
+      "title": "LOS JUGADORES DE ESTUDIANTES APLAUDEN A LOS ÁRBITROS TRAS LA ENTREGA DE LAS MEDALLAS. 📺 La #SupercopaInternacional 🏆, por ESPN en el Plan Premium de #DisneyPlus",
+      "url": "https://x.com/i/web/status/2103965867012681768",
+      "views": 588021,
+      "likes": 1774,
+      "author": "",
+      "published": "2026-09-26T21:52:07.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103965821764505600/vid/avc1/1280x720/GR03SAVNUtBoLqMI.mp4?tag=16",
+      "duration": 21.9,
+      "description": ""
+     },
+     {
+      "id": "t35",
+      "platform": "X",
+      "title": "El enojo del Cacique Medina y los aplausos de Verón tras el cobro del penal para Rosario Central. 📺 La #SupercopaInternacional 🏆, por ESPN en el Plan Premium de #DisneyPlus",
+      "url": "https://x.com/i/web/status/2103938675683831824",
+      "views": 471826,
+      "likes": 1018,
+      "author": "",
+      "published": "2026-09-26T20:04:04.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103938652900397056/vid/avc1/1280x720/BPrEi3Z6ODzYFoNR.mp4?tag=16",
+      "duration": 10.1,
+      "description": ""
+     },
+     {
+      "id": "t29",
+      "platform": "X",
+      "title": "¡¡¡UNA VERDADERA OBRA DE ARTE!!! ¡¡GOLAZO DE FIDEO DI MARÍA PARA EL 1-1 DE ROSARIO CENTRAL VS. ESTUDIANTES!! 📺 La #SupercopaInternacional 🏆, por ESPN en el Plan Premium de #DisneyPlus",
+      "url": "https://x.com/i/web/status/2103930541938512285",
+      "views": 573346,
+      "likes": 1481,
+      "author": "",
+      "published": "2026-09-26T19:31:44.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103930498590371840/vid/avc1/1280x720/vJcx2odWasQ4Lk2o.mp4?tag=16",
+      "duration": 30.5,
+      "description": ""
+     },
+     {
+      "id": "t11",
+      "platform": "X",
+      "title": "🤯🇦🇷 PFFF, QUÉ GOLAZO DE DI MARÍA.",
+      "url": "https://x.com/i/web/status/2103930691767480504",
+      "views": 988483,
+      "likes": 8936,
+      "author": "",
+      "published": "2026-09-26T19:32:20.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103930498590371840/vid/avc1/1280x720/vJcx2odWasQ4Lk2o.mp4?tag=16",
+      "duration": 30.5,
+      "description": ""
+     }
+    ]
+   },
+   "links": [
+    "https://x.com/i/web/status/2103958911451558395",
+    "https://x.com/i/web/status/2103962184459903305",
+    "https://x.com/i/web/status/2103965867012681768",
+    "https://x.com/i/web/status/2103938675683831824",
+    "https://x.com/i/web/status/2103930541938512285",
+    "https://x.com/i/web/status/2103930691767480504"
+   ],
+   "videos": []
+  },
+  {
+   "id": "20260927-2",
+   "date": "2026-09-27",
+   "created": "2026-09-27T05:27+03:00",
+   "number": 2,
+   "message_id": 34,
+   "status": "waiting",
+   "script": {
+    "category": "курьёз",
+    "hook": "нутмег скелли барса",
+    "text": "Сколько нужно съесть в детской академии, чтобы мяч сам проходил сквозь чужие ноги? Молодой игрок «Барсы» получает пас, видит защитника «Арсенала» Льюис-Скелли и без раздумий закатывает мяч ему между ног. Защитник даже не успевает среагировать, только провожает мяч взглядом. Судья рядом смотрит с таким лицом, будто не поверил свистку. Ответ один: в Барселоне явно кормят нутмегами с пелёнок, а Льюис-Скелли просто оказался не в меню.",
+    "title": "не в меню",
+    "description": "Молодой игрок «Барсы» оставил защитника «Арсенала» Льюис-Скелли не у дел эффектным нутмегом — ролик уже разлетелся по сети. Источник: X.",
+    "hashtags": [
+     "#футбол",
+     "#барселона",
+     "#арсенал",
+     "#льюисскелли",
+     "#кубарси"
+    ],
+    "footage_queries": [
+     "football stadium crowd from stands",
+     "soccer match stadium night fans",
+     "football player dribbling pitch distance"
+    ],
+    "mood": "весело",
+    "sources": [
+     [
+      "X",
+      "https://x.com/i/web/status/2103930958898679835"
+     ]
+    ],
+    "context": "В соцсети разлетелось видео, где молодой игрок «Барсы» на глазах у трибун прокинул мяч между ног защитника «Арсенала» Льюис-Скелли; автор поста подписал ролик шуткой про то, чем кормят игроков в Барселоне.",
+    "popular": [
+     {
+      "id": "t41",
+      "platform": "X",
+      "title": "Paul curbasi showed Lewis-skelly how it’s done 😭 what are they feeding them in Barcelona?",
+      "url": "https://x.com/i/web/status/2103930958898679835",
+      "views": 443765,
+      "likes": 10666,
+      "author": "",
+      "published": "2026-09-26T19:33:24.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103930470647873537/vid/avc1/1266x720/RsePhdGQGaglL_JD.mp4",
+      "duration": 34.7,
+      "description": ""
+     }
+    ]
+   },
+   "links": [
+    "https://x.com/i/web/status/2103930958898679835"
+   ],
+   "videos": []
   }
  ],
  "last_update_id": 356227875
