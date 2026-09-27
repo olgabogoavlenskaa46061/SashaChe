@@ -430,6 +430,156 @@
     "https://x.com/i/web/status/2103817721242697867"
    ],
    "videos": []
+  },
+  {
+   "id": "20260927-1",
+   "date": "2026-09-27",
+   "created": "2026-09-27T05:09+03:00",
+   "number": 1,
+   "message_id": 30,
+   "status": "waiting",
+   "script": {
+    "category": "главное",
+    "hook": "кому звонить за гол",
+    "text": "Кому в Барселоне звонят, когда матч трещит по швам? Вот смотри: мяч на ноге, впереди целая оборона соперника, финт, ещё финт, и защитники просто разъезжаются в стороны. Вратарь даже среагировать не успевает. Трибуны вскакивают, партнёры несутся обниматься, а герой момента спокойно прикладывает руку к сердцу, будто извиняется. Клуб сам всё объяснил в подписи: если нужен гол, ты знаешь, кому звонить. Ну а кто ещё, если не он.",
+    "title": "горячая линия",
+    "description": "Барселона показала момент решающего гола, который стал вирусным в соцсетях. Источник: Instagram, X.",
+    "hashtags": [
+     "#футбол",
+     "#барселона",
+     "#лалига",
+     "#жезус",
+     "#laliga"
+    ],
+    "footage_queries": [
+     "soccer player dribbling past defenders",
+     "football stadium crowd celebration",
+     "football fans cheering stands"
+    ],
+    "mood": "энергично",
+    "sources": [
+     [
+      "Instagram",
+      "https://www.instagram.com/p/Ddv_G4aOdPZ/"
+     ]
+    ],
+    "context": "«Барселона» выложила в соцсетях ролик с решающим голом, который за сутки собрал более 11 миллионов просмотров, а в подписи клуб намекнул, что все знают, кому звонить, если нужен гол.",
+    "popular": [
+     {
+      "id": "t3",
+      "platform": "Instagram",
+      "title": "If you need a goal, you know who to call 📞😮‍💨 #laligahighlights",
+      "url": "https://www.instagram.com/p/Ddv_G4aOdPZ/",
+      "views": 11290457,
+      "likes": 540322,
+      "author": "fcbarcelona",
+      "published": "2026-09-26T16:00:08.000Z",
+      "video_url": "https://instagram.fltn4-1.fna.fbcdn.net/o1/v/t2/f2/m86/AQPtS73H--DfAqTcCDXc9VKVNWjyFZgO23KTOjKI3Vi387fMEj854iL6UYVg07Jfwz6OPZplc734iHHCS-kDtF4Pw7hu1MiYtyL9Gp0.mp4?_nc_cat=1&_nc_oc=AdqwDXHARNDoPIry2UoYfHO8fFMttExmukObT0j4bRZULIH4AUcLv8tzFttt7Y4tpGbbY1MMx4n0j1Ns3bWuvJ_r&_nc_sid=5e9851&_nc_ht=instagram.fltn4-1.fna.fbcdn.net&_nc_ohc=16mqSYq1HCsQ7kNvwG3eUOJ&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uQ0xJUFMuQzMuNzIwLmRhc2hfYmFzZWxpbmVfMV92MSIsInhwdl9hc3NldF9pZCI6MjYyNTA4MzA3MTIzODQyMiwiYXNzZXRfYWdlX2RheXMiOjIsInZpX3VzZWNhc2VfaWQiOjEwMDk5LCJkdXJhdGlvbl9zIjoyMywidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=9dedd0eba9119978&_nc_vs=HBksFQIYUmlnX3hwdl9yZWVsc19wZXJtYW5lbnRfc3JfcHJvZC9ENzRFQzRDNUIzNjIyRTNDRTE2NjdFRkFERkU5NzdBMF92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYUWlnX3hwdl9wbGFjZW1lbnRfcGVybWFuZW50X3YyL0I5NEFBMTQ4MzQwRERCRjk2MjRCNTg3QkU2MURDOEFEX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACasxLz_-N-pCRUCKAJDMywXQDd64UeuFHsYEmRhc2hfYmFzZWxpbmVfMV92MREAdf4HZeadAQA&_nc_gid=NhQP5hVVPf_cmdE9z340jA&_nc_ss=7a22e&_nc_zt=28&oh=00_AQLBtxMcsVyNtAXBn5-h1MilO4vXUILkgHAZZpEAVJLD6A&oe=6ABA563D",
+      "duration": 23.5,
+      "description": ""
+     },
+     {
+      "id": "t17",
+      "platform": "X",
+      "title": "If you need a goal, you know who to call. 📞😮‍💨 #LaLigaHighlights",
+      "url": "https://x.com/i/web/status/2103817051882008636",
+      "views": 726328,
+      "likes": 26013,
+      "author": "",
+      "published": "2026-09-26T12:00:46.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103817017530757120/vid/avc1/1280x720/alhGtAu8Pt6GeDp2.mp4?tag=16",
+      "duration": 24.1,
+      "description": ""
+     }
+    ]
+   },
+   "links": [
+    "https://www.instagram.com/p/Ddv_G4aOdPZ/",
+    "https://x.com/i/web/status/2103817051882008636"
+   ],
+   "videos": []
+  },
+  {
+   "id": "20260927-2",
+   "date": "2026-09-27",
+   "created": "2026-09-27T05:09+03:00",
+   "number": 2,
+   "message_id": 31,
+   "status": "waiting",
+   "script": {
+    "category": "курьёз",
+    "hook": "роналдо за рулём",
+    "text": "Что нужно, чтобы пятикратный обладатель Золотого мяча возил вас на работу? Оказывается, просто быть Диогу Далотом. Роналду садится за руль гольф-кара, газует так, что на экране мелькает скорость, а сам Далот только и успевает выдыхать. На кадрах написано «всё нормально», хотя по лицам так не скажешь. В итоге лучший в истории форвард найден новое призвание. Персональный водитель. Правда, тарифы явно не по карману никому, кроме сборной Португалии.",
+    "title": "нашёл новую работу",
+    "description": "Криштиану Роналду прокатил Диогу Далота на гольф-каре, и соцсети окрестили это самым дорогим такси в истории футбола. Источник: Instagram, X.",
+    "hashtags": [
+     "#футбол",
+     "#роналду",
+     "#далот",
+     "#манчестерюнайтед",
+     "#португалия"
+    ],
+    "footage_queries": [
+     "golf cart driving field sunny",
+     "football players training ground candid",
+     "soccer stadium behind the scenes fun"
+    ],
+    "mood": "весело",
+    "sources": [
+     [
+      "Instagram",
+      "https://www.instagram.com/p/DdwQDi7AP9K/"
+     ]
+    ],
+    "context": "В соцсетях разлетелось видео, где Криштиану Роналду за рулём гольф-кара катает партнёра по сборной Португалии Диогу Далота, а подписи в сети в шутку называют его личным водителем и даже пилотом Формулы-1.",
+    "popular": [
+     {
+      "id": "t30",
+      "platform": "Instagram",
+      "title": "Cristiano Ronaldo AKA Diogo Dalot’s driver 🚗🤝😂 @diogodalot",
+      "url": "https://www.instagram.com/p/DdwQDi7AP9K/",
+      "views": 440461,
+      "likes": 45856,
+      "author": "onefootball",
+      "published": "2026-09-26T14:31:33.000Z",
+      "video_url": "https://instagram.frtm1-3.fna.fbcdn.net/o1/v/t2/f2/m86/AQMCwnd76J4XWHtd0r6B03BpgsgZgMaLM0yhoAPZYa4cT3F24-R340-g5QXJ0qVDi0pCJoJ3oFGutHb5FYM5E1ATZQNG_gyANHUtcnI.mp4?_nc_cat=109&_nc_oc=AdoZVoyDAY6vSV0RE5omGsD9-vrOxVq-ntuc54fXVJk9UqMIl7o7u1e9f0OZQ8OdQXo&_nc_sid=5e9851&_nc_ht=instagram.frtm1-3.fna.fbcdn.net&_nc_ohc=IUJRzNRWA-oQ7kNvwF-wxpk&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uQ0xJUFMuQzMuNTc2LmRhc2hfYmFzZWxpbmVfMV92MSIsInhwdl9hc3NldF9pZCI6MTE0MjA3NjkzMTU5NDQzNiwiYXNzZXRfYWdlX2RheXMiOjAsInZpX3VzZWNhc2VfaWQiOjEwMDk5LCJkdXJhdGlvbl9zIjoxMiwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=d65bb1a15e4d5ea5&_nc_vs=HBksFQIYUmlnX3hwdl9yZWVsc19wZXJtYW5lbnRfc3JfcHJvZC9BMDQ1NTY4RDRBMEU3MjUxM0FDNzQwRUNCRjVGOEVBOF92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYUWlnX3hwdl9wbGFjZW1lbnRfcGVybWFuZW50X3YyLzZENDIzNzZFOTRFQzZDRkJDQTI2MEY2QjNGRTlDMDlFX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaI44Kd0K2HBBUCKAJDMywXQCkAAAAAAAAYEmRhc2hfYmFzZWxpbmVfMV92MREAdf4HZeadAQA&_nc_gid=eLdKt3yLbO5_wbmp0Mjcfg&_nc_ss=7a22e&_nc_map=urlgen_bucketless&_nc_zt=28&oh=00_AQLzSwwNcJnxku1RF_mDlcBVagbCODQvCSSTKx0WEAkZYw&oe=6ABA473E",
+      "duration": 12.5,
+      "description": ""
+     },
+     {
+      "id": "t48",
+      "platform": "Instagram",
+      "title": "#Ronaldo driving a golf cart 🤣 (via @diogodalot) #portugal #manchesterunited",
+      "url": "https://www.instagram.com/p/DdwdGpwuZNy/",
+      "views": 301505,
+      "likes": 14382,
+      "author": "espnfc",
+      "published": "2026-09-26T16:23:32.000Z",
+      "video_url": "https://scontent-ham3-1.cdninstagram.com/o1/v/t2/f2/m86/AQNaQWKRAeWwzvexeeBU3ALp7JXwTCuDuJjYJzr5tO0ZlFQNUk4rlSBhBdBq6MgrBjSuAPeVvaar9K2k11GDAVr1eYT_ct4R6TTDX5o.mp4?_nc_cat=107&_nc_sid=5e9851&_nc_ht=scontent-ham3-1.cdninstagram.com&_nc_ohc=dpnraqt17QcQ7kNvwH0_GWF&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uQ0xJUFMuQzMuNzIwLmRhc2hfYmFzZWxpbmVfMV92MSIsInhwdl9hc3NldF9pZCI6MjgzNzg1NTU1OTUxMzI3MzYsImFzc2V0X2FnZV9kYXlzIjowLCJ2aV91c2VjYXNlX2lkIjoxMDA5OSwiZHVyYXRpb25fcyI6MTIsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=e435989086683862&_nc_vs=HBksFQIYUmlnX3hwdl9yZWVsc19wZXJtYW5lbnRfc3JfcHJvZC8yMTQ0NzhERkE4QkJCM0ZGQkQ3QzNBREExQ0Q0MTc4N192aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYUWlnX3hwdl9wbGFjZW1lbnRfcGVybWFuZW50X3YyLzZGNENCQUIwQzNBMEY0NzU2MEVENTUxQkNDN0E0RkFGX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACaAveTXq4npZBUCKAJDMywXQCkQ5WBBiTcYEmRhc2hfYmFzZWxpbmVfMV92MREAdf4HZeadAQA&_nc_gid=VIkc8HpWaZCxA01c6NBTmQ&_nc_ss=7a22e&_nc_zt=28&oh=00_AQLOtj0lJNJNjCA6dV6nVVBq0T3UghiOlsYgA6uA39tF_w&oe=6ABA53B4",
+      "duration": 12.5,
+      "description": ""
+     },
+     {
+      "id": "t62",
+      "platform": "X",
+      "title": "𝐂𝐑𝐈𝐒𝐓𝐈𝐀𝐍𝐎 𝐓𝐇𝐄 𝐅𝟏 𝐃𝐑𝐈𝐕𝐄𝐑 🤣🛻",
+      "url": "https://x.com/i/web/status/2103832289750970736",
+      "views": 301181,
+      "likes": 20812,
+      "author": "",
+      "published": "2026-09-26T13:01:19.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103832235086364673/vid/avc1/720x1280/1Sfy1PXYZAajDdsf.mp4",
+      "duration": 12.1,
+      "description": ""
+     }
+    ]
+   },
+   "links": [
+    "https://www.instagram.com/p/DdwQDi7AP9K/",
+    "https://www.instagram.com/p/DdwdGpwuZNy/",
+    "https://x.com/i/web/status/2103832289750970736"
+   ],
+   "videos": []
   }
  ],
  "last_update_id": 356227875
