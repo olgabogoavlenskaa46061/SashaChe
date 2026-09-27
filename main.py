@@ -120,11 +120,13 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
         raise RuntimeError("не удалось получить свежие новости ни из одного источника: "
                            + "; ".join(f"{k} — {v}" for k, v in report.items()))
     mix = dict(config.SHORTS_MIX)
-    if limit:
-        left = limit
-        for name in list(mix):
-            mix[name] = min(mix[name], left)
-            left -= mix[name]
+    if limit and limit < sum(mix.values()):
+        # по одной теме каждого типа по кругу: 2 темы → главное + курьёз, 3 → ещё и интересное
+        full, mix = mix, {name: 0 for name in mix}
+        while sum(mix.values()) < limit:
+            for name in full:
+                if sum(mix.values()) < limit and mix[name] < full[name]:
+                    mix[name] += 1
     popular, popular_report = trends.collect()
     report.update(popular_report)
     selections = ed.select(stories, mix, history.recent_titles(hist), trends=popular)
