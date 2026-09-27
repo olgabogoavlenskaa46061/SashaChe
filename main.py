@@ -143,6 +143,9 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
     if config.TOPIC_SOURCE == "viral":
         fresh = [t for t in popular if t.url not in used]
         if fresh:
+            label_footage(ed, fresh, report)
+            fresh = [t for t in fresh if t.footage != "other"]  # не футбольный матч — мимо
+        if fresh:
             selections = viral_topics(ed, fresh, stories, mix, recent, used)
             if selections:
                 return selections, report
@@ -163,6 +166,28 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
     if not selections:
         raise RuntimeError("Claude не выбрал ни одной темы")
     return selections, report
+
+
+def label_footage(ed: editor_mod.Editor, candidates: list, report: dict) -> None:
+    """Claude смотрит обложки: снято с трибун, телетрансляция или вообще не футбольный матч."""
+    thumbs = trends.fetch_thumbnails(candidates)
+    if not thumbs:
+        return
+    try:
+        labels = ed.classify_footage(candidates, thumbs)
+    except Exception as error:
+        log.warning("Не получилось разобрать обложки: %s", error)
+        report["Обложки"] = f"ошибка: {_hide_keys(str(error))[:150]}"
+        _annotation("warning", "Обложки", report["Обложки"])
+        return
+    for trend in candidates:
+        trend.footage = labels.get(trend.id, "")
+    counts = {kind: sum(1 for v in labels.values() if v == kind) for kind in ("stands", "broadcast", "other")}
+    state = (f"с трибун: {counts['stands']}, трансляций: {counts['broadcast']}, "
+             f"не футбольный матч: {counts['other']}")
+    report["Обложки"] = state
+    _annotation("notice", "Обложки", state)
+    github_summary(f"🎥 Обложки: {state}")
 
 
 def viral_topics(ed: editor_mod.Editor, fresh: list, stories: list, mix: dict[str, int],
@@ -210,7 +235,7 @@ def broken_sources(report: dict) -> list[str]:
 def popular_summary(report: dict) -> str:
     """«📈 Популярное за сутки: YouTube — видео: 30; X — постов прочитано: 100 ≈ $0.50»."""
     parts = [f"{k} — {v}" for k, v in report.items()
-             if k in ("YouTube", "X", "Instagram") and not v.startswith("ошибка")]
+             if k in ("YouTube", "X", "Instagram", "Обложки") and not v.startswith("ошибка")]
     return "📈 Популярное за сутки: " + "; ".join(parts) if parts else ""
 
 
@@ -389,6 +414,15 @@ def run_scripts(args) -> int:
         day_dir = config.OUTPUT_DIR / now.strftime("%Y-%m-%d")
         day_dir.mkdir(parents=True, exist_ok=True)
         (day_dir / "texts.md").write_text("\n".join(preview), encoding="utf-8")
+        if args.dry_run:  # пробный запуск: темы — на странице запуска, в Telegram и историю ничего
+            for number, (selection, script) in enumerate(scripts, 1):
+                clip = next((p for p in script.popular if p.get("video_url") and p.get("footage") == "stands"), None)
+                background = f"видео с трибун: {clip['url']}" if clip else "общие кадры стадиона"
+                _annotation("notice", f"Тема {number}: {script.hook}",
+                            f"[{script.category}] {script.text} | Фон: {background}")
+            github_summary("\n".join(preview))
+            log.info("Пробный запуск: в Telegram ничего не отправлено, темы не запомнены")
+            return 0
         pending.expire(data)
         pending.save(data)
         history.save(hist)

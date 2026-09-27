@@ -110,10 +110,10 @@ class Editor:
         self.client.models.list(limit=1)
 
     # ── общий вызов ──────────────────────────────────────────────────────
-    def _ask(self, system: str, user: str, schema: dict, max_tokens: int = 3000,
+    def _ask(self, system: str, user: str | list, schema: dict, max_tokens: int = 3000,
              images: list[bytes] | None = None) -> dict:
         content: str | list = user
-        if images:  # кадры из видео — Claude видит, что происходит в моменте
+        if images and isinstance(user, str):  # кадры из видео — Claude видит, что происходит в моменте
             content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                     "data": base64.b64encode(img).decode("ascii")}}
                        for img in images] + [{"type": "text", "text": user}]
@@ -274,6 +274,42 @@ class Editor:
                  sum(1 for r in result if r.trends))
         return result
 
+    # ── 1а. Как снято видео: с трибун, трансляция или вообще не футбол ───
+    def classify_footage(self, trends: list, thumbs: dict[str, bytes], batch: int = 50) -> dict[str, str]:
+        """По обложкам: stands — матч по футболу, снятый с трибуны; broadcast — телетрансляция;
+        other — не футбольный матч (американский футбол, другой спорт, студия, реклама…)."""
+        system = """Ты смотришь обложки коротких видео и определяешь, что на каждой.
+- stands — матч по обычному футболу (соккер), снятый зрителем с трибуны на телефон: в кадре зрители, головы и спины, ограждение или сетка, ракурс с трибуны, нет телевизионной графики.
+- broadcast — телетрансляция матча по обычному футболу: табло со счётом и временем, логотип канала, телевизионный ракурс, повтор, крупный план с ТВ-камеры.
+- other — всё остальное: американский футбол (шлемы, наплечники, овальный мяч), другие виды спорта, тренировка, интервью, студия, пресс-конференция, графика, реклама, селфи, раздевалка, съёмка из соцсетей игрока.
+Если сомневаешься между stands и broadcast — выбирай broadcast."""
+        schema = {
+            "type": "object",
+            "properties": {"videos": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"},
+                               "kind": {"type": "string", "enum": ["stands", "broadcast", "other"]}},
+                "required": ["id", "kind"], "additionalProperties": False}}},
+            "required": ["videos"], "additionalProperties": False,
+        }
+        items = [t for t in trends if t.id in thumbs]
+        labels: dict[str, str] = {}
+        for start in range(0, len(items), batch):
+            content: list = []
+            for t in items[start:start + batch]:
+                content.append({"type": "text", "text": f"[{t.id}] {t.platform}: {t.title[:120]}"})
+                content.append({"type": "image", "source": {
+                    "type": "base64", "media_type": "image/jpeg",
+                    "data": base64.b64encode(thumbs[t.id]).decode("ascii")}})
+            content.append({"type": "text", "text": "Определи kind для каждого видео выше. "
+                                                    "id — ровно как в квадратных скобках."})
+            data = self._ask(system, content, schema, max_tokens=4000)
+            for row in data.get("videos", []):
+                tid = str(row.get("id", "")).strip("[] ")
+                if tid in thumbs and row.get("kind") in ("stands", "broadcast", "other"):
+                    labels[tid] = row["kind"]
+        return labels
+
     # ── 1б. Выбор тем из популярных видео (YouTube и X) ──────────────────
     def select_viral(self, trends: list, news: list[NewsItem], mix: dict[str, int],
                      recent_titles: list[str], max_news: int = 250,
@@ -294,7 +330,14 @@ class Editor:
                     when = datetime.fromisoformat(t.published.replace("Z", "+00:00")).astimezone(tz).strftime("%d.%m %H:%M")
                 except ValueError:
                     pass
-            extra = " · видео можно взять в ролик" if t.video_url else ""
+            if t.footage == "stands":
+                extra = " · снято с трибун" + (", видео пойдёт в ролик" if t.video_url else "")
+            elif t.footage == "broadcast":
+                extra = " · телетрансляция"
+            elif t.video_url and config.CLIP_SOURCE != "stands":
+                extra = " · видео можно взять в ролик"
+            else:
+                extra = ""
             length = f" · {round(t.duration)} с" if t.duration else ""
             author = f" · {t.author}" if t.author else ""
             descr = f" — {t.description[:150]}" if t.description else ""
@@ -304,6 +347,14 @@ class Editor:
                      + (" · ⚠️ уже было в роликах" if any(i.link in used_links for i in n.all_items) else "")
                      for n in news[:max_news]]
 
+        if config.CLIP_SOURCE == "stands":
+            clip_rule = ("- В ролик берём только видео, снятые болельщиками с трибун (пометка «снято с трибун»), "
+                         "а не телетрансляции. В первую очередь бери моменты, у которых есть такое видео, и указывай "
+                         "его главным, остальные видео про этот момент — в поле also. Момент только с телетрансляцией "
+                         "бери, лишь если достойных моментов с трибун не хватает: тогда в ролике будут общие кадры стадиона.")
+        else:
+            clip_rule = ("- Если один и тот же момент есть на нескольких площадках, главным укажи видео с пометкой "
+                         "«видео можно взять в ролик» (из X или Instagram), остальные — в поле also.")
         system = f"""Ты — шеф-редактор футбольного канала «{config.CHANNEL_NAME}» с короткими вертикальными видео. Автор — Саша, болельщик, который комментирует футбол своим голосом и с иронией. {AUDIENCE}
 
 Каждый день ты выбираешь темы из самых популярных футбольных видео за сутки в X, Instagram и на YouTube: что люди смотрят и лайкают больше всего. Сегодня нужно {total} тем:
@@ -321,9 +372,9 @@ class Editor:
 - Моменты всех лиг и турниров. Тема — один конкретный момент из видео, о котором Саша расскажет за 20 секунд. Чем больше просмотров и лайков, тем лучше, но важнее, чтобы момент был ярким и понятным.
 - Герой должен быть понятен: из подписи, названия или новостей видно, кто это (игрок, клуб, матч). Если непонятно, кто в кадре и что за матч, — не бери.
 - {NO_NAMES}
-- Только футбол (соккер). Американский футбол, регби и другие виды спорта не бери. Не бери хайлайты целых матчей, обзоры туров, подборки «топ-10», подкасты, стримы, рекламу, ставки и медиафутбол.
+- Только обычный футбол (соккер). Американский и студенческий футбол (NFL, NCAA, college football, тачдаун, квотербек, шлемы и овальный мяч), регби и другие виды спорта не бери, даже если в подписи написано «football». Не бери хайлайты целых матчей, обзоры туров, подборки «топ-10», подкасты, стримы, рекламу, ставки и медиафутбол.
 - Не бери смерти, тяжёлые травмы, насилие, войну и политику.
-- Если один и тот же момент есть на нескольких площадках, главным укажи видео с пометкой «видео можно взять в ролик» (из X или Instagram), остальные — в поле also.
+{clip_rule}
 - Каждая тема — отдельный момент. Разные видео про один и тот же эпизод — одна тема.
 - Не повторяй то, что уже выходило (список ниже). Разные эпизоды одного матча — это тот же сюжет: если матч уже был, никакие видео с него не бери (гол, сейв, празднование, раздевалка — всё это тот же матч). Новости с пометкой «уже было в роликах» — про такие матчи и события.
 - Если в какой-то категории нет достойного момента, возьми сильный момент другой категории и укажи его настоящую категорию.

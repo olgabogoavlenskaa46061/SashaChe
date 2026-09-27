@@ -808,7 +808,8 @@
       "published": "2026-09-26T15:23:45.000Z",
       "video_url": "https://scontent-yyz1-1.cdninstagram.com/o1/v/t16/f2/m84/AQO7OMPxl9cJSt2oYWhDVJDNI3lHEVxa7hLQYHFiREaXRYsr6iyjiHGYaDaChYr6aj4uwj3eb1PiCgmsnivFaogdZQhwd3xeVp6jZxw.mp4?_nc_cat=110&_nc_sid=5e9851&_nc_ht=scontent-yyz1-1.cdninstagram.com&_nc_ohc=4Q9vBF7hB5MQ7kNvwFno0wH&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uQ0xJUFMuQzMuNzIwLmRhc2hfYmFzZWxpbmVfMV92MSIsInhwdl9hc3NldF9pZCI6Mzg2ODM4MjIyNjYzODA0MywiYXNzZXRfYWdlX2RheXMiOjAsInZpX3VzZWNhc2VfaWQiOjEwODI3LCJkdXJhdGlvbl9zIjoyNCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=808ef1f476e524bb&_nc_vs=HBksFQIYTGlnX2JhY2tmaWxsX3RpbWVsaW5lX3ZvZC8wNTQ3RDNFNTQyMzYxMzNCQTdDNzY4MzZEQkEzNDQ5Rl92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYUWlnX3hwdl9wbGFjZW1lbnRfcGVybWFuZW50X3YyLzhGNEU0NjBFMjc4ODQ5NzEzMzEyOUUxNzIwQkVDNkJBX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACa2k8vHvZHfDRUCKAJDMywXQDiZmZmZmZoYEmRhc2hfYmFzZWxpbmVfMV92MREAdf4HZZapAQA&_nc_gid=Tu2X-Z42_kKQ0fTDHQDIwQ&_nc_ss=7a22e&_nc_zt=28&oh=00_AQKtmBJ9gGXtikyar2tLqnPdKj_jhuPS_4dcZJ8R55mXHA&oe=6ABADC5A",
       "duration": 24.6,
-      "description": ""
+      "description": "",
+      "footage": "stands"
      },
      {
       "id": "t71",
@@ -910,7 +911,7 @@
    "created": "2026-09-27T12:36+03:00",
    "number": 3,
    "message_id": 44,
-   "status": "waiting",
+   "status": "expired",
    "script": {
     "category": "главное",
     "hook": "грязный подкат на Мура",

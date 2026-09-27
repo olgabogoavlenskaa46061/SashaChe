@@ -55,6 +55,7 @@ jobs:
           USE_CLIPS: ${{ vars.USE_CLIPS }}
           CLIP_VOLUME: ${{ vars.CLIP_VOLUME }}
           CLIP_ZOOM: ${{ vars.CLIP_ZOOM }}
+          CLIP_SOURCE: ${{ vars.CLIP_SOURCE }}
           VIDEO_STYLE: ${{ vars.VIDEO_STYLE }}
           SUBTITLES: ${{ vars.SUBTITLES }}
           TTS_VOICE: ${{ vars.TTS_VOICE }}

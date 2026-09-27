@@ -202,10 +202,15 @@ def script_message(script, number: int, total: int) -> str:
     popular = popular_line(script.popular)
     if popular:
         parts.append(popular)
-        clips = [p for p in script.popular if p.get("video_url")]
+        stands_only = config.CLIP_SOURCE == "stands"
+        clips = [p for p in script.popular if p.get("video_url")
+                 and (not stands_only or p.get("footage") == "stands")]
         if config.USE_CLIPS and clips:
             best = max(clips, key=lambda p: (p.get("views") or 0, p.get("likes") or 0))
-            parts.append(f"🎬 Фоном ролика будет видео из {tg_escape(best.get('platform') or 'X')} про этот момент.")
+            what = "видео с трибун" if stands_only else "видео"
+            parts.append(f"🎬 Фоном ролика будет {what} из {tg_escape(best.get('platform') or 'X')} про этот момент.")
+        elif config.USE_CLIPS and stands_only:
+            parts.append("🏟 Видео с трибун про этот момент нет — фоном будут общие кадры стадиона.")
     parts += [
         "",
         "↩️ Ответьте на это сообщение голосовым — соберу ролик. "

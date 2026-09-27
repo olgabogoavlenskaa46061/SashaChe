@@ -261,6 +261,8 @@ def clip_background(popular: list[dict], workdir: Path) -> Background | None:
     if not config.USE_CLIPS:
         return None
     candidates = [p for p in popular or [] if p.get("video_url")]
+    if config.CLIP_SOURCE == "stands":  # только снятые болельщиками с трибун, не телетрансляции
+        candidates = [p for p in candidates if p.get("footage") == "stands"]
     candidates.sort(key=lambda p: (p.get("views") or 0, p.get("likes") or 0), reverse=True)
     for number, post in enumerate(candidates[:3], 1):
         path = workdir / f"clip_{number}.mp4"

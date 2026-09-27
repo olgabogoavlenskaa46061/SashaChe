@@ -11,8 +11,10 @@ Claude получает этот список как подсказку, как�
 from __future__ import annotations
 
 import html
+import io
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -43,6 +45,8 @@ class Trend:
     video_url: str = ""     # прямая ссылка на mp4 (только X)
     duration: float = 0.0   # секунды
     description: str = ""   # описание видео (YouTube)
+    thumb_url: str = ""     # обложка видео — по ней Claude понимает, как снято
+    footage: str = ""       # stands — снято с трибун, broadcast — трансляция, other — не матч по футболу
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -58,6 +62,18 @@ class Trend:
         if self.likes:
             return f"{self.platform} · {human_count(self.likes)} ❤"
         return self.platform
+
+
+# Слова, по которым видно, что это не наш футбол (американский, студенческий и т. п.).
+_OTHER_SPORT = re.compile(
+    r"\b(nfl|ncaa|ncaaf|cfb|college football|touchdowns?|quarterbacks?|heisman|super ?bowl|field goal|"
+    r"first down|linebackers?|wide receivers?|running backs?|tight ends?|end zone|pick[- ]six|hail mary|"
+    r"dirty hits?|big ten|gridiron|nba|nhl|mlb|rugby|cricket)\b", re.IGNORECASE)
+
+
+def other_sport(trend: "Trend") -> bool:
+    """Подпись явно про другой спорт — американский футбол, баскетбол, регби…"""
+    return bool(_OTHER_SPORT.search(f"{trend.title} {trend.description}"))
 
 
 def human_count(n: int) -> str:
@@ -127,7 +143,8 @@ def youtube_popular(hours: int = 24) -> list[Trend]:
             views=int(st.get("viewCount") or 0), likes=int(st.get("likeCount") or 0),
             author=one_line(html.unescape(snippet.get("channelTitle", ""))),
             published=snippet.get("publishedAt", ""),
-            description=one_line(html.unescape(snippet.get("description", "")))[:500]))
+            description=one_line(html.unescape(snippet.get("description", "")))[:500],
+            thumb_url=f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"))
     trends.sort(key=lambda t: (t.views, t.likes), reverse=True)
     return trends
 
@@ -167,22 +184,22 @@ def _x_accounts(headers: dict | None = None) -> list[str]:
 
 
 def _x_queries(headers: dict | None = None) -> list[tuple[str, int]]:
-    """Два запроса: видео больших футбольных аккаунтов и вирусные видео с любых аккаунтов."""
+    """Три запроса: видео больших футбольных аккаунтов, вирусные видео с любых аккаунтов
+    и видео болельщиков с трибун. Бюджет постов делится примерно 50 / 30 / 20."""
     budget = max(10, config.X_MAX_POSTS)
     accounts = _x_accounts(headers)
-    queries = []
     viral = f"({config.X_KEYWORDS}) has:video_link -is:retweet -is:reply min_likes:{config.X_VIRAL_LIKES}"
-    if accounts and budget >= 20:
+    stands = (f"({config.X_STANDS_WORDS}) ({config.X_STANDS_CONTEXT}) has:video_link -is:retweet "
+              f"min_likes:{config.X_STANDS_LIKES}")
+    parts: list[tuple[str, float]] = []
+    if accounts:
         from_part = " OR ".join(f"from:{a}" for a in accounts)
-        own = min(100, max(10, round(budget * 0.6)))
-        queries.append((f"({from_part}) has:video_link -is:retweet min_likes:{config.X_MIN_LIKES}", own))
-        queries.append((viral, min(100, max(10, budget - own))))
-    elif accounts:
-        from_part = " OR ".join(f"from:{a}" for a in accounts)
-        queries.append((f"({from_part}) has:video_link -is:retweet min_likes:{config.X_MIN_LIKES}", budget))
-    else:
-        queries.append((viral, min(100, budget)))
-    return queries
+        parts.append((f"({from_part}) has:video_link -is:retweet min_likes:{config.X_MIN_LIKES}", 0.5))
+    parts += [(viral, 0.3), (stands, 0.2)]
+    if budget < 10 * len(parts):  # маленький бюджет — только самые полезные запросы
+        parts = parts[:max(1, budget // 10)]
+    total = sum(w for _, w in parts)
+    return [(q, min(100, max(10, round(budget * w / total)))) for q, w in parts]
 
 
 def _simplify(query: str) -> str:
@@ -201,7 +218,7 @@ def x_popular(hours: int = 24) -> tuple[list[Trend], int]:
         params = {"query": query, "start_time": since, "max_results": limit,
                   "tweet.fields": "created_at,public_metrics,attachments",
                   "expansions": "attachments.media_keys",
-                  "media.fields": "type,variants,duration_ms"}
+                  "media.fields": "type,variants,duration_ms,preview_image_url"}
         try:
             data = _get_json(X_SEARCH, params, headers)
         except RuntimeError as error:
@@ -225,7 +242,8 @@ def x_popular(hours: int = 24) -> tuple[list[Trend], int]:
                 url=f"https://x.com/i/web/status/{post['id']}",
                 views=int(metrics.get("impression_count") or 0), likes=int(metrics.get("like_count") or 0),
                 published=post.get("created_at", ""), video_url=_best_mp4(video),
-                duration=round((video.get("duration_ms") or 0) / 1000, 1))
+                duration=round((video.get("duration_ms") or 0) / 1000, 1),
+                thumb_url=video.get("preview_image_url") or "")
     result = sorted(trends.values(), key=lambda t: (t.views, t.likes), reverse=True)
     return result, read
 
@@ -264,7 +282,8 @@ def instagram_popular(hours: int = 24) -> tuple[list[Trend], int]:
             id="", platform="Instagram", title=caption[:200] or "видео без подписи", url=url,
             views=max(0, int(views or 0)), likes=max(0, int(item.get("likesCount") or 0)),
             author=item.get("ownerUsername") or "", published=item.get("timestamp") or "",
-            video_url=item["videoUrl"], duration=round(float(item.get("videoDuration") or 0), 1))
+            video_url=item["videoUrl"], duration=round(float(item.get("videoDuration") or 0), 1),
+            thumb_url=item.get("displayUrl") or item.get("thumbnailUrl") or "")
     result = sorted(trends.values(), key=lambda t: (t.views, t.likes), reverse=True)
     return result, len(items)
 
@@ -368,6 +387,14 @@ def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
     else:
         report["Instagram"] = "не подключён (нет секрета APIFY_TOKEN)"
 
+    dropped = 0
+    for bucket in (youtube, x_posts, reels):
+        keep = [t for t in bucket if not other_sport(t)]
+        dropped += len(bucket) - len(keep)
+        bucket[:] = keep
+    if dropped:
+        log.info("Отброшено видео про другой спорт (американский футбол и т. п.): %d", dropped)
+
     per = config.TRENDS_PER_PLATFORM
     pad = [None] * per
     mixed: list[Trend] = []
@@ -391,6 +418,29 @@ def stats_line(trend: Trend) -> str:
 def youtube_id(url: str) -> str:
     match = re.search(r"(?:v=|/shorts/|youtu\.be/)([\w-]{6,})", url or "")
     return match.group(1) if match else ""
+
+
+def fetch_thumbnails(trends: list[Trend], size: int = 384) -> dict[str, bytes]:
+    """Обложки видео, уменьшенные до size точек по большей стороне (JPEG). Не скачалось — пропускаем."""
+    from PIL import Image
+
+    def load(trend: Trend):
+        if not trend.thumb_url:
+            return trend.id, None
+        try:
+            response = requests.get(trend.thumb_url, timeout=15, headers={"User-Agent": config.USER_AGENT})
+            response.raise_for_status()
+            image = Image.open(io.BytesIO(response.content)).convert("RGB")
+            image.thumbnail((size, size))
+            out = io.BytesIO()
+            image.save(out, "JPEG", quality=72)
+            return trend.id, out.getvalue()
+        except Exception as error:
+            log.info("Обложка не скачалась (%s): %s", trend.url, error)
+            return trend.id, None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return {tid: data for tid, data in pool.map(load, trends) if data}
 
 
 def popularity_note(trends: list[Trend]) -> str:

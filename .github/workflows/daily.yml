@@ -10,6 +10,10 @@ on:
       limit:
         description: "Сколько тем взять (0 — как в настройках)"
         default: "0"
+      dry_run:
+        description: "Пробный запуск: ничего не отправлять Саше, темы показать здесь"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -54,6 +58,7 @@ jobs:
           USE_CLIPS: ${{ vars.USE_CLIPS }}
           CLIP_VOLUME: ${{ vars.CLIP_VOLUME }}
           CLIP_ZOOM: ${{ vars.CLIP_ZOOM }}
+          CLIP_SOURCE: ${{ vars.CLIP_SOURCE }}
           VOICE_MODE: ${{ vars.VOICE_MODE }}
           VIDEO_STYLE: ${{ vars.VIDEO_STYLE }}
           SUBTITLES: ${{ vars.SUBTITLES }}
@@ -62,7 +67,13 @@ jobs:
           TTS_VOICE: ${{ vars.TTS_VOICE }}
           CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
           LIMIT: ${{ github.event.inputs.limit || '0' }}
-        run: python main.py --limit "$LIMIT"
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python main.py scripts --dry-run --limit "$LIMIT"
+          else
+            python main.py --limit "$LIMIT"
+          fi
 
       - name: Запомнить темы
         if: always()

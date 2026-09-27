@@ -128,15 +128,21 @@ YOUTUBE_API_KEY = _env("YOUTUBE_API_KEY")   # бесплатно: console.cloud.
 X_BEARER_TOKEN = _env("X_BEARER_TOKEN")     # платно: console.x.com, $0.005 за пост
 
 # Запросы к YouTube: (что искать, страна, язык).
+# Без слова «football»: в США так называют американский футбол.
 YOUTUBE_QUERIES = [("футбол", "RU", "ru"), ("гол", "RU", "ru"), ("fútbol", "ES", "es"), ("golazo", "MX", "es"),
-                   ("football", "GB", "en"), ("goal", "GB", "en"), ("soccer", "US", "en")]
+                   ("premier league", "GB", "en"), ("soccer", "US", "en")]
 YOUTUBE_PER_QUERY = 25
 
 # X: большие футбольные аккаунты с видео и слова для поиска вирусных видео с любых аккаунтов.
 X_ACCOUNTS = _env("X_ACCOUNTS", "433,brfootball,goal,ESPNFC,OneFootball,TrollFootball,sportbible,"
                                 "FCBarcelona,realmadrid,marca,diarioas,SC_ESPN,LaLiga")
-X_KEYWORDS = ('football OR soccer OR fútbol OR golazo OR футбол OR Messi OR Ronaldo OR Mbappe OR Yamal '
-              'OR Vinicius OR Haaland OR Barcelona OR "Real Madrid"')
+X_KEYWORDS = ('soccer OR fútbol OR futbol OR golazo OR футбол OR "Premier League" OR LaLiga OR "Champions League" '
+              'OR Messi OR Ronaldo OR Mbappe OR Yamal OR Vinicius OR Haaland OR "Real Madrid" OR Barcelona')
+# Видео болельщиков с трибун: такие слова в подписи + что-то про футбол.
+X_STANDS_WORDS = ('"from the stands" OR "fan footage" OR "fan view" OR "fans view" OR "desde la tribuna" '
+                  'OR "desde la grada" OR "с трибуны" OR "с трибун"')
+X_STANDS_CONTEXT = "soccer OR fútbol OR futbol OR football OR футбол OR gol OR goal OR golazo"
+X_STANDS_LIKES = int(_env("X_STANDS_LIKES", "300"))
 X_MAX_POSTS = int(_env("X_MAX_POSTS", "100"))       # сколько постов читать за день ($0.005 за каждый)
 X_MIN_LIKES = int(_env("X_MIN_LIKES", "1000"))      # порог лайков для постов больших аккаунтов
 X_VIRAL_LIKES = int(_env("X_VIRAL_LIKES", "5000"))  # порог лайков для постов с любых аккаунтов
@@ -153,6 +159,10 @@ INSTAGRAM_MAX_REELS = int(_env("INSTAGRAM_MAX_REELS", "60"))       # потол�
 INSTAGRAM_ACTOR = "apify~instagram-reel-scraper"
 INSTAGRAM_PRICE_PER_REEL = 0.0026
 TRENDS_PER_PLATFORM = int(_env("TRENDS_PER_PLATFORM", "25"))  # сколько популярных видео с каждой площадки показывать Claude
+
+# Какие видео брать фоном ролика: stands — только снятые болельщиками с трибун (Claude смотрит обложку
+# и отличает их от телетрансляции), any — любые видео из X и Instagram.
+CLIP_SOURCE = _env("CLIP_SOURCE", "stands").lower()
 
 # Видео из X или Instagram как фон ролика: 1 — да (если тема совпала с видео), 0 — только стоковые кадры.
 USE_CLIPS = _env("USE_CLIPS", "1").lower() not in ("0", "false", "no", "нет")
