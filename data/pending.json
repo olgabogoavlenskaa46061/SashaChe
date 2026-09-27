@@ -205,6 +205,231 @@
     "https://www.sport-express.ru/football/nation-league/news/napadayuschego-embolo-otstranili-ot-sbornoy-shveycarii-iz-za-poddelki-spravki-o-vakcinacii-2457882/"
    ],
    "videos": []
+  },
+  {
+   "id": "20260927-1",
+   "date": "2026-09-27",
+   "created": "2026-09-27T04:19+03:00",
+   "number": 1,
+   "message_id": 26,
+   "status": "waiting",
+   "script": {
+    "category": "главное",
+    "hook": "гол Ямаля на 2-й минуте",
+    "text": "Уэмбли, вторая минута — и хозяева уже смотрят на табло с недоумением. Ямаль просто забрал мяч себе, будто прессинг — это его личное поручение от тренера. Вышел один на один, и Англия поняла: вечер будет долгим. Потом хозяева, конечно, задергались, забили пару раз, изобразили камбэк. Но три-два всё равно осталось за гостями. Уэмбли снова гостеприимен — для чужих побед.",
+    "title": "домашний уют",
+    "description": "Ямаль вынес мяч у соперника на второй минуте и сразу наказал Англию на «Уэмбли», а Испания дожала матч 3:2. Источник: Спорт-Экспресс, Sports.ru, X.",
+    "hashtags": [
+     "#футбол",
+     "#испания",
+     "#англия",
+     "#ямаль",
+     "#лиганаций"
+    ],
+    "footage_queries": [
+     "football stadium crowd from stands",
+     "soccer match stadium night",
+     "football fans cheering stands"
+    ],
+    "mood": "энергично",
+    "sources": [
+     [
+      "X",
+      "https://x.com/i/web/status/2103921403066019937"
+     ],
+     [
+      "Спорт-Экспресс",
+      "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-yamal-otkryl-schet-na-2-y-minute-matcha-ligi-naciy-26-sentyabrya-2026-2458059/"
+     ],
+     [
+      "Sports.ru",
+      "https://www.sports.ru/football/1117382523-yamal-o-32-s-angliej-trener-treboval-ot-nas-idti-v-pressing-inogda-uda.html"
+     ],
+     [
+      "Спорт-Экспресс",
+      "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-schet-i-rezultat-matcha-ligi-naciy-26-sentyabrya-2026-2458076/"
+     ]
+    ],
+    "context": "В матче группового этапа Лиги наций Испания приехала на «Уэмбли» и уже на 2-й минуте повела в счёте: Ямаль отобрал мяч после прессинга, вышел один на один и забил. Матч закончился победой Испании 3:2, несмотря на попытки Англии отыграться.",
+    "popular": [
+     {
+      "id": "t24",
+      "platform": "X",
+      "title": "⚽️👑 LAMINE YAMAL 🇪🇸 OUVRE LA MARQUE APRÈS MÊME PAS 2 MINUTES DE JEU FACE À L’ANGLETERRE 🏴󠁧󠁢󠁥󠁮󠁧󠁿 !!!!! EN MISSION 🤩 🎥 @lequipe",
+      "url": "https://x.com/i/web/status/2103921403066019937",
+      "views": 377004,
+      "likes": 8724,
+      "author": "",
+      "published": "2026-09-26T18:55:26.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103921181673816065/vid/avc1/1280x720/Y6Xnoox72YPNX44x.mp4?tag=16",
+      "duration": 88.2,
+      "description": ""
+     },
+     {
+      "id": "t14",
+      "platform": "X",
+      "title": "Lamine Yamal vs England — CHOOSE ONE. @ballondor",
+      "url": "https://x.com/i/web/status/2103948363402002775",
+      "views": 501193,
+      "likes": 17178,
+      "author": "",
+      "published": "2026-09-26T20:42:33.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103947746113634304/vid/avc1/1280x720/KAMxLbPbP-NXM8XO.mp4",
+      "duration": 209.7,
+      "description": ""
+     },
+     {
+      "id": "t16",
+      "platform": "X",
+      "title": "Lamine Yamal is INSANE. 🪄🇪🇸",
+      "url": "https://x.com/i/web/status/2103928763553853726",
+      "views": 452027,
+      "likes": 9376,
+      "author": "",
+      "published": "2026-09-26T19:24:40.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103928678132367360/vid/avc1/1280x720/i_0qbXuFxRe5kPDz.mp4?tag=14",
+      "duration": 13.4,
+      "description": ""
+     },
+     {
+      "id": "t20",
+      "platform": "X",
+      "title": "Lamine Yamal vs England",
+      "url": "https://x.com/i/web/status/2103948665341805036",
+      "views": 388075,
+      "likes": 13833,
+      "author": "",
+      "published": "2026-09-26T20:43:45.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103948385552314368/vid/avc1/1280x720/Li9OTy5JHPc9fNev.mp4",
+      "duration": 157.3,
+      "description": ""
+     },
+     {
+      "id": "t26",
+      "platform": "X",
+      "title": "Ferran Torres missed 2 clear chances; - 1 miss from Rodri’s through ball - 1 miss from Lamine Yamal’s through ball Thank God FC Barcelona disposed him",
+      "url": "https://x.com/i/web/status/2103928702924886178",
+      "views": 363072,
+      "likes": 8362,
+      "author": "",
+      "published": "2026-09-26T19:24:26.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103928119740583936/vid/avc1/720x720/dAmAmDzuUVhG5jIT.mp4",
+      "duration": 18.9,
+      "description": ""
+     },
+     {
+      "id": "t34",
+      "platform": "X",
+      "title": "Rapha & Lamine’s celebration at the end 🥹",
+      "url": "https://x.com/i/web/status/2103877455337447667",
+      "views": 326308,
+      "likes": 11089,
+      "author": "",
+      "published": "2026-09-26T16:00:48.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103877416976302080/vid/avc1/720x1280/k-SFB-lN9hyVLL7l.mp4?tag=16",
+      "duration": 20.5,
+      "description": ""
+     },
+     {
+      "id": "t42",
+      "platform": "X",
+      "title": "Lamine YAMAL 🇪🇸 dans le vestiaire après avoir fait le boulot face à l’Angleterre 🏴󠁧󠁢󠁥󠁮󠁧󠁿. 😁 📲 yeresantos10",
+      "url": "https://x.com/i/web/status/2103958342028685324",
+      "views": 265657,
+      "likes": 8390,
+      "author": "",
+      "published": "2026-09-26T21:22:13.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103958299792089089/vid/avc1/720x1280/5FZK5E-pg-FVct3b.mp4",
+      "duration": 11.9,
+      "description": ""
+     },
+     {
+      "id": "t50",
+      "platform": "X",
+      "title": "NAH WHAT IS THIS NASTY TOUCH FROM LAMINE YAMAL. 🤯🔥",
+      "url": "https://x.com/i/web/status/2103928633668534287",
+      "views": 220288,
+      "likes": 7747,
+      "author": "",
+      "published": "2026-09-26T19:24:10.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103928313148223488/vid/avc1/1280x720/8qxqnkDuhIPMg4us.mp4?tag=14",
+      "duration": 9.5,
+      "description": ""
+     }
+    ]
+   },
+   "links": [
+    "https://x.com/i/web/status/2103921403066019937",
+    "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-yamal-otkryl-schet-na-2-y-minute-matcha-ligi-naciy-26-sentyabrya-2026-2458059/",
+    "https://www.sports.ru/football/1117382523-yamal-o-32-s-angliej-trener-treboval-ot-nas-idti-v-pressing-inogda-uda.html",
+    "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-schet-i-rezultat-matcha-ligi-naciy-26-sentyabrya-2026-2458076/",
+    "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-baena-zabil-v-matche-ligi-naciy-26-sentyabrya-2026-2458071/",
+    "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-keyn-zabil-v-matche-ligi-naciy-26-sentyabrya-2026-2458063/",
+    "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-ferran-torres-ne-realizoval-dva-vyhoda-odin-na-odin-v-matche-ligi-naciy-26-sentyabrya-2026-2458064/",
+    "https://www.championat.com/football/news-6634964-sbornaya-ispanii-obnovila-mirovoj-rekord-po-chislu-oficialnyh-matchej-podryad-bez-porazhenij.html",
+    "https://x.com/i/web/status/2103948363402002775",
+    "https://x.com/i/web/status/2103928763553853726",
+    "https://x.com/i/web/status/2103948665341805036",
+    "https://x.com/i/web/status/2103928702924886178",
+    "https://x.com/i/web/status/2103877455337447667",
+    "https://x.com/i/web/status/2103958342028685324",
+    "https://x.com/i/web/status/2103928633668534287"
+   ],
+   "videos": []
+  },
+  {
+   "id": "20260927-2",
+   "date": "2026-09-27",
+   "created": "2026-09-27T04:19+03:00",
+   "number": 2,
+   "message_id": 27,
+   "status": "waiting",
+   "script": {
+    "category": "курьёз",
+    "hook": "маккарти прыгает с крыши",
+    "text": "Маккарти шесть лет тренировал Вулвз и как-то выжил. Теперь решил спрыгнуть с крыши Молинью — ради благотворительности, не от отчаяния. Его спрашивают: точно всё пройдёт нормально? Он честно отвечает: да куда там. Хоть в чём-то тренер не врёт болельщикам. Стоит на пустых трибунах с микрофоном, будто снова разбирает игру, только в этот раз разбирать будут его самого.",
+    "title": "сам предупредил",
+    "description": "Экс-тренер Вулверхэмптона честно признался, что прыжок с крыши стадиона может пойти не по плану. Источник: X.",
+    "hashtags": [
+     "#футбол",
+     "#вулверхэмптон",
+     "#маккарти",
+     "#апл",
+     "#благотворительность"
+    ],
+    "footage_queries": [
+     "empty football stadium stands day",
+     "soccer stadium rooftop view",
+     "football fans cheering stands"
+    ],
+    "mood": "весело",
+    "sources": [
+     [
+      "X",
+      "https://x.com/i/web/status/2103817721242697867"
+     ]
+    ],
+    "context": "Экс-тренер Вулверхэмптона Мик Маккарти готовится спрыгнуть с крыши стадиона Молинью в рамках благотворительной акции и с иронией комментирует происходящее.",
+    "popular": [
+     {
+      "id": "t38",
+      "platform": "X",
+      "title": "\"Mick, surely nothing can go wrong, can it?\" \"It can!\" 🤣 Former Wolves manager Mick McCarthy delivers his iconic line as he prepares to abseil from the top of Molineux Stadium for charity 👏",
+      "url": "https://x.com/i/web/status/2103817721242697867",
+      "views": 318097,
+      "likes": 2677,
+      "author": "",
+      "published": "2026-09-26T12:03:26.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103817663642234880/vid/avc1/1280x720/xBCAzkIxFKgAKq1b.mp4?tag=16",
+      "duration": 31.6,
+      "description": ""
+     }
+    ]
+   },
+   "links": [
+    "https://x.com/i/web/status/2103817721242697867"
+   ],
+   "videos": []
   }
  ],
  "last_update_id": 356227875
