@@ -25,6 +25,8 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import requests
+
 import config
 from shorts import articles, collector, footage, history, inbox, pending, render, trends, voice
 from shorts import editor as editor_mod
@@ -131,10 +133,8 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
     mix = topic_mix(limit)
     popular, popular_report = trends.collect()
     for name, state in popular_report.items():  # видно на странице запуска в GitHub
-        if state.startswith("ошибка"):
-            _annotation("warning", name, state)
-        else:
-            github_summary(f"📈 {name}: {state}")
+        _annotation("warning" if state.startswith("ошибка") else "notice", name, state)
+        github_summary(f"📈 {name}: {state}")
     stories, report = collector.collect()
     report.update(popular_report)
     used = history.used_links(hist)
@@ -232,7 +232,7 @@ def with_popularity(material: str, selection) -> str:
 def _hide_keys(text: str) -> str:
     for secret in (config.TELEGRAM_BOT_TOKEN, config.ANTHROPIC_API_KEY, config.PEXELS_API_KEY,
                    config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN, config.APIFY_TOKEN):
-        if secret:
+        if secret and len(secret) >= 8:  # настоящие ключи длинные; короткое значение — не ключ
             text = text.replace(secret, "***")
     return text
 
@@ -412,6 +412,65 @@ def run_inbox(args) -> int:
         return 1
 
 
+# ─── проверка ключей ─────────────────────────────────────────────────────
+def run_check(args) -> int:
+    """Проверяет все ключи и пишет, что работает, а что нет. В Telegram ничего не отправляет."""
+    rows: list[tuple[str, bool, str]] = []
+
+    def add(name: str, ok: bool, text: str, required: bool = False) -> None:
+        text = _hide_keys(text)
+        rows.append((name, ok, text))
+        _annotation("notice" if ok else ("error" if required else "warning"), name, text)
+
+    if not config.ANTHROPIC_API_KEY:
+        add("Claude", False, "нет секрета ANTHROPIC_API_KEY", True)
+    else:
+        problem = claude_problem()
+        add("Claude", problem is None, problem or "ключ работает", True)
+
+    if not config.TELEGRAM_BOT_TOKEN:
+        add("Telegram", False, "нет секрета TELEGRAM_BOT_TOKEN", True)
+    elif not config.TELEGRAM_CHAT_ID:
+        add("Telegram", False, "нет секрета TELEGRAM_CHAT_ID", True)
+    else:
+        try:
+            chat = Telegram().get_chat()
+            add("Telegram", True, f"бот видит чат «{chat.get('title') or 'личный чат'}»", True)
+        except Exception as error:
+            add("Telegram", False, f"бот не может писать в чат: {error}", True)
+
+    if not config.PEXELS_API_KEY:
+        add("Pexels", False, "нет секрета PEXELS_API_KEY — фон будет рисованным")
+    else:
+        try:
+            response = requests.get(footage.PEXELS_SEARCH, params={"query": "stadium", "per_page": 1},
+                                    headers={"Authorization": config.PEXELS_API_KEY}, timeout=30)
+            add("Pexels", response.ok, "ключ работает" if response.ok
+                else f"ключ не подходит (HTTP {response.status_code})")
+        except Exception as error:
+            add("Pexels", False, f"не ответил: {error}")
+
+    checks = (("YouTube", "YOUTUBE_API_KEY", config.YOUTUBE_API_KEY, trends.youtube_check, trends.youtube_hint),
+              ("X", "X_BEARER_TOKEN", config.X_BEARER_TOKEN, trends.x_check, trends.x_hint),
+              ("Instagram", "APIFY_TOKEN", config.APIFY_TOKEN, trends.apify_check, lambda e: ""))
+    for name, secret, value, check, hint in checks:
+        if not value:
+            add(name, False, f"нет секрета {secret}: проверьте, что название точно «{secret}» и он добавлен "
+                             "на вкладке Secrets (не Variables)")
+            continue
+        try:
+            add(name, True, check())
+        except Exception as error:
+            text = trends._safe(error)
+            add(name, False, hint(text) or text)
+
+    lines = [f"{'✅' if ok else '❌'} {name}: {text}" for name, ok, text in rows]
+    for line in lines:
+        log.info(line)
+    github_summary("### Проверка ключей\n\n" + "\n".join(f"- {line}" for line in lines))
+    return 0 if all(ok for name, ok, _ in rows if name in ("Claude", "Telegram")) else 1
+
+
 # ─── полностью автоматический режим (нейроголос) ────────────────────────
 def make_short(ed: editor_mod.Editor, selection, number: int, day_dir: Path, hist: dict,
                date_label: str, today_text: str, seed: int) -> dict:
@@ -530,7 +589,7 @@ def demo(args) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Футбольные шортсы в стиле канала «САША Ч.»")
     parser.add_argument("command", nargs="?", default="daily",
-                        choices=["daily", "scripts", "inbox", "auto", "demo"],
+                        choices=["daily", "scripts", "inbox", "auto", "demo", "check"],
                         help="что сделать (по умолчанию — утренний запуск)")
     parser.add_argument("--dry-run", action="store_true", help="не отправлять в Telegram")
     parser.add_argument("--limit", type=int, default=0, help="сколько тем взять (по умолчанию — все)")
@@ -543,10 +602,11 @@ def main() -> int:
     command = "demo" if args.demo else args.command
     if command == "daily":
         command = "scripts" if config.VOICE_MODE == "human" else "auto"
-    wants_telegram = not args.dry_run and (command != "demo" or args.send)
+    wants_telegram = not args.dry_run and command != "check" and (command != "demo" or args.send)
     if wants_telegram and config.TELEGRAM_BOT_TOKEN and not config.TELEGRAM_CHAT_ID:
         return first_contact()
-    return {"scripts": run_scripts, "inbox": run_inbox, "auto": run_auto, "demo": demo}[command](args)
+    return {"scripts": run_scripts, "inbox": run_inbox, "auto": run_auto, "demo": demo,
+            "check": run_check}[command](args)
 
 
 def run() -> int:

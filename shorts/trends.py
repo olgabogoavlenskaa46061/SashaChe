@@ -247,11 +247,65 @@ def instagram_popular(hours: int = 24) -> tuple[list[Trend], int]:
     return result, len(items)
 
 
+# ─── проверка ключей ─────────────────────────────────────────────────────
+def youtube_check() -> str:
+    data = _get_json(YT_SEARCH, {"part": "snippet", "type": "video", "q": "football", "maxResults": 1},
+                     {"X-Goog-Api-Key": config.YOUTUBE_API_KEY})
+    items = data.get("items") or []
+    if not items:
+        return "ключ работает, но поиск ничего не вернул"
+    title = one_line(html.unescape((items[0].get("snippet") or {}).get("title", "")))[:60]
+    return f"ключ работает (для проверки нашлось видео «{title}»)"
+
+
+def youtube_hint(error: str) -> str:
+    low = error.lower()
+    if "not been used" in low or "disabled" in low or "accessnotconfigured" in low:
+        return "в Google Cloud не включён YouTube Data API v3: APIs & Services → Library → YouTube Data API v3 → Enable"
+    if "not valid" in low or "invalid" in low and "key" in low:
+        return "ключ не подходит — скопируйте его заново: APIs & Services → Credentials"
+    if "referer" in low or "referrer" in low or "blocked" in low:
+        return "у ключа стоят ограничения: Credentials → ключ → Application restrictions → None"
+    if "quota" in low:
+        return "закончилась дневная квота YouTube — завтра снова заработает"
+    return ""
+
+
+def x_check() -> str:
+    data = _get_json(X_SEARCH, {"query": "from:433 -is:retweet", "max_results": 10, "tweet.fields": "public_metrics"},
+                     {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"})
+    read = len(data.get("data") or [])
+    return f"токен работает (для проверки прочитано постов: {read} ≈ ${read * config.X_PRICE_PER_POST:.2f})"
+
+
+def x_hint(error: str) -> str:
+    low = error.lower()
+    if "http 401" in low or "unauthorized" in low:
+        return "токен не подходит — скопируйте Bearer Token заново на console.x.com (Apps → ваше приложение)"
+    if "http 402" in low or "credit" in low or "payment" in low:
+        return "закончились кредиты — пополните на console.x.com: Billing → Credits"
+    if "http 403" in low:
+        return "у приложения нет доступа к поиску — проверьте, что оно создано в console.x.com и есть кредиты"
+    if "http 429" in low:
+        return "слишком много запросов — попробуйте через 15 минут"
+    return ""
+
+
+def apify_check() -> str:
+    response = requests.get("https://api.apify.com/v2/users/me", timeout=30,
+                            headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
+    if response.status_code >= 400:
+        raise RuntimeError(f"HTTP {response.status_code}: токен не подходит — скопируйте его заново: "
+                           "Apify → Settings → API & Integrations")
+    data = (response.json() or {}).get("data") or {}
+    return f"токен работает (аккаунт {data.get('username') or 'Apify'})"
+
+
 # ─── вместе ──────────────────────────────────────────────────────────────
 def _safe(error: Exception) -> str:
     text = f"{type(error).__name__}: {error}" if not isinstance(error, RuntimeError) else str(error)
     for secret in (config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN, config.APIFY_TOKEN):
-        if secret:
+        if secret and len(secret) >= 8:
             text = text.replace(secret, "***")
     return one_line(text)[:200]
 
@@ -266,14 +320,20 @@ def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
             report["YouTube"] = f"видео: {len(youtube)}"
         except Exception as error:
             log.warning("YouTube недоступен: %s", _safe(error))
-            report["YouTube"] = f"ошибка: {_safe(error)}"
+            hint = youtube_hint(_safe(error))
+            report["YouTube"] = f"ошибка: {hint or _safe(error)}"
+    else:
+        report["YouTube"] = "не подключён (нет секрета YOUTUBE_API_KEY)"
     if config.X_BEARER_TOKEN:
         try:
             x_posts, read = x_popular(hours)
             report["X"] = f"постов прочитано: {read} ≈ ${read * config.X_PRICE_PER_POST:.2f}"
         except Exception as error:
             log.warning("X недоступен: %s", _safe(error))
-            report["X"] = f"ошибка: {_safe(error)}"
+            hint = x_hint(_safe(error))
+            report["X"] = f"ошибка: {hint or _safe(error)}"
+    else:
+        report["X"] = "не подключён (нет секрета X_BEARER_TOKEN)"
 
     if config.APIFY_TOKEN:
         try:
@@ -282,6 +342,8 @@ def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
         except Exception as error:
             log.warning("Instagram недоступен: %s", _safe(error))
             report["Instagram"] = f"ошибка: {_safe(error)}"
+    else:
+        report["Instagram"] = "не подключён (нет секрета APIFY_TOKEN)"
 
     per = config.TRENDS_PER_PLATFORM
     pad = [None] * per
