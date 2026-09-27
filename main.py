@@ -482,8 +482,15 @@ def run_scripts(args) -> int:
         (day_dir / "texts.md").write_text("\n".join(preview), encoding="utf-8")
         if args.dry_run:  # пробный запуск: темы — на странице запуска, в Telegram и историю ничего
             for number, (selection, script) in enumerate(scripts, 1):
-                clip = next((p for p in script.popular if p.get("video_url") and p.get("footage") == "stands"), None)
-                background = f"видео с трибун: {clip['url']}" if clip else "общие кадры стадиона"
+                with tempfile.TemporaryDirectory() as tmp:  # проверяем, что видео с трибун правда скачивается
+                    clip = footage.clip_background(script.popular, Path(tmp))
+                    if clip:
+                        size = clip.files[0].stat().st_size / 1e6
+                        background = f"видео с трибун (скачалось, {size:.1f} МБ): {clip.credits[0]}"
+                    elif any(p.get("video_url") and p.get("footage") == "stands" for p in script.popular):
+                        background = "общие кадры стадиона — видео с трибун не скачалось"
+                    else:
+                        background = "общие кадры стадиона"
                 _annotation("notice", f"Тема {number}: {script.hook}",
                             f"[{script.category}] {script.text} | Фон: {background}")
             github_summary("\n".join(preview))
