@@ -313,7 +313,7 @@ class Editor:
     # ── 1б. Выбор тем из популярных видео (YouTube и X) ──────────────────
     def select_viral(self, trends: list, news: list[NewsItem], mix: dict[str, int],
                      recent_titles: list[str], max_news: int = 250,
-                     used_links: set[str] | None = None) -> list[Selection]:
+                     used_links: set[str] | None = None, exact: bool = True) -> list[Selection]:
         """Темы — самые популярные футбольные моменты за сутки. Новости — только чтобы сверить факты."""
         tz = ZoneInfo(config.TIMEZONE)
         trend_by_id = {t.id: t for t in trends}
@@ -347,6 +347,9 @@ class Editor:
                      + (" · ⚠️ уже было в роликах" if any(i.link in used_links for i in n.all_items) else "")
                      for n in news[:max_news]]
 
+        how_many = (f"Верни ровно {total} тем (не больше) в порядке от самой сильной к слабой." if exact else
+                    f"Верни не больше {total} тем — только действительно достойные, лучше меньше, чем слабые. "
+                    "Если достойных нет, верни пустой список. Порядок — от самой сильной к слабой.")
         if config.CLIP_SOURCE == "stands":
             clip_rule = ("- В ролик берём только видео, снятые болельщиками с трибун (пометка «снято с трибун»), "
                          "а не телетрансляции. В первую очередь бери моменты, у которых есть такое видео, и указывай "
@@ -385,7 +388,7 @@ class Editor:
 Уже выходили:
 {recent}
 
-Верни ровно {total} тем (не больше) в порядке от самой сильной к слабой. В поле trend — ровно тот id, что в квадратных скобках (например, t3)."""
+{how_many} В поле trend — ровно тот id, что в квадратных скобках (например, t3)."""
         schema = {
             "type": "object",
             "properties": {

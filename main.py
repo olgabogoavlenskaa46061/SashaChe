@@ -192,28 +192,49 @@ def label_footage(ed: editor_mod.Editor, candidates: list, report: dict) -> None
 
 def viral_topics(ed: editor_mod.Editor, fresh: list, stories: list, mix: dict[str, int],
                  recent: list[str], used: set[str]) -> list:
-    """Темы из популярных видео. Если к моменту подходят новости, которые уже были в роликах, —
-    это тот же матч или событие: такую тему отбрасываем и один раз добираем замену."""
+    """Темы из популярных видео.
+
+    Если в ролик идут только видео с трибун, сначала выбираем только среди них — и лишь потом, если
+    достойных не хватило, добираем остальные моменты (у них фоном будут общие кадры стадиона).
+    Если к моменту подходят новости, которые уже были в роликах, — это тот же матч: такую тему
+    отбрасываем и добираем замену."""
     wanted = sum(mix.values())
     chosen: list = []
-    candidates = list(fresh)
     left = dict(mix)
-    for _ in range(2):
-        picked = ed.select_viral(candidates, stories, left, recent, used_links=used)
-        taken = {t.url for sel in picked for t in sel.trends}
-        for sel in picked:
-            if any(n.link in used for n in sel.item.related):
-                log.info("Пропускаю «%s»: этот матч или событие уже было в роликах", sel.item.title[:80])
-                continue
-            chosen.append(sel)
-            if left.get(sel.category, 0) > 0:
-                left[sel.category] -= 1
-            else:  # тема другой категории — снимаем с самой большой
-                biggest = max(left, key=left.get)
-                left[biggest] = max(0, left[biggest] - 1)
-        candidates = [t for t in candidates if t.url not in taken]
-        if len(chosen) >= wanted or not candidates or sum(left.values()) <= 0:
+    taken: set[str] = set()
+    rounds = []
+    if config.CLIP_SOURCE == "stands":
+        stands = [t for t in fresh if t.footage == "stands" and t.video_url]
+        if stands:
+            rounds.append((stands, False))
+    rounds.append((fresh, True))
+    for pool, exact in rounds:
+        candidates = [t for t in pool if t.url not in taken]
+        for _ in range(2):
+            if not candidates or sum(left.values()) <= 0:
+                break
+            picked = ed.select_viral(candidates, stories, left, recent, used_links=used, exact=exact)
+            taken.update(t.url for sel in picked for t in sel.trends)
+            for sel in picked:
+                if any(n.link in used for n in sel.item.related):
+                    log.info("Пропускаю «%s»: этот матч или событие уже было в роликах", sel.item.title[:80])
+                    continue
+                if sum(left.values()) <= 0:
+                    break
+                chosen.append(sel)
+                if left.get(sel.category, 0) > 0:
+                    left[sel.category] -= 1
+                else:  # тема другой категории — снимаем с самой большой
+                    biggest = max(left, key=left.get)
+                    left[biggest] = max(0, left[biggest] - 1)
+            candidates = [t for t in candidates if t.url not in taken]
+            if not picked or not exact:
+                break
+        if len(chosen) >= wanted:
             break
+    if config.CLIP_SOURCE == "stands":
+        with_stands = sum(1 for sel in chosen if sel.trends and sel.trends[0].footage == "stands")
+        log.info("Тем с видео с трибун: %d из %d", with_stands, len(chosen))
     return chosen[:wanted]
 
 
