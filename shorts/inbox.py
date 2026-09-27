@@ -40,7 +40,7 @@ def _build(item: dict, message: dict, media: dict | None, text: str,
                 script.text = text  # Саша прислал свой вариант текста
             speech = voice.synthesize(script.text, work / "voice.mp3")
         seed = int(now.strftime("%j")) * 10 + item["number"] + take
-        bg = footage.clip_background(script.popular, work) or footage.get_background(
+        bg = footage.clip_background(script.popular, work, telegram) or footage.get_background(
             script.footage_queries, script.category, speech.duration + 1.0,
             work, history.used_footage(hist), seed=seed)
         music = render.pick_music(script.mood)

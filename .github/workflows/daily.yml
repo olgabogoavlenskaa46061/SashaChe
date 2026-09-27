@@ -52,6 +52,8 @@ jobs:
           X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           INSTAGRAM_ACCOUNTS: ${{ vars.INSTAGRAM_ACCOUNTS }}
+          TIKTOK_QUERIES: ${{ vars.TIKTOK_QUERIES }}
+          TIKTOK_MIN_PLAYS: ${{ vars.TIKTOK_MIN_PLAYS }}
           TOPIC_SOURCE: ${{ vars.TOPIC_SOURCE }}
           X_MAX_POSTS: ${{ vars.X_MAX_POSTS }}
           X_ACCOUNTS: ${{ vars.X_ACCOUNTS }}

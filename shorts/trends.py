@@ -292,6 +292,81 @@ def instagram_popular(hours: int = 24) -> tuple[list[Trend], int]:
     return result, len(items)
 
 
+# ─── TikTok (через Apify) ────────────────────────────────────────────────
+def _first(item: dict, *paths: str):
+    """Первое непустое значение по путям вида "videoMeta.coverUrl"."""
+    for path in paths:
+        value = item
+        for key in path.split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        if isinstance(value, list):
+            value = next((v for v in value if v), None)
+        if value:
+            return value
+    return None
+
+
+def _tiktok_video_url(item: dict) -> str:
+    media = item.get("mediaUrls") or []
+    videos = [m for m in media if isinstance(m, str) and (".mp4" in m or "video" in m)]
+    return str(videos[0] if videos else _first(item, "videoMeta.downloadAddr", "video.downloadAddr",
+                                                 "videoUrl", "video.playAddr", "videoMeta.playAddr") or "")
+
+
+def tiktok_popular(hours: int | None = None) -> tuple[list[Trend], int, str]:
+    """Свежие популярные футбольные видео TikTok (больше всего — снятых с трибун).
+    Возвращает видео, сколько получено строк и пометку для отчёта."""
+    body = {"searchQueries": config.TIKTOK_QUERIES, "maxVideosPerInput": config.TIKTOK_PER_QUERY,
+            "maxTotalVideos": config.TIKTOK_MAX_VIDEOS}
+    response = requests.post(APIFY_RUN.format(actor=config.TIKTOK_ACTOR), json=body, timeout=330,
+                             params={"maxItems": config.TIKTOK_MAX_VIDEOS},
+                             headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if response.status_code >= 400:
+        error = (data or {}).get("error") if isinstance(data, dict) else None
+        message = (error or {}).get("message") if isinstance(error, dict) else None
+        raise RuntimeError(f"HTTP {response.status_code}: {one_line(message or response.text[:200])[:200]}")
+    items = [i for i in (data if isinstance(data, list) else []) if isinstance(i, dict) and not i.get("error")]
+    border = datetime.now(timezone.utc) - timedelta(hours=hours or config.TIKTOK_MAX_AGE_HOURS)
+    trends: dict[str, Trend] = {}
+    with_file = 0
+    for item in items:
+        url = str(_first(item, "webVideoUrl", "url", "shareUrl") or "")
+        if not url or url in trends:
+            continue
+        published = str(_first(item, "createTimeISO") or "")
+        if not published and item.get("createTime"):
+            try:
+                published = datetime.fromtimestamp(int(item["createTime"]), timezone.utc).isoformat()
+            except (TypeError, ValueError):
+                published = ""
+        try:
+            if published and datetime.fromisoformat(published.replace("Z", "+00:00")) < border:
+                continue
+        except ValueError:
+            pass
+        plays = int(_first(item, "playCount", "stats.playCount") or 0)
+        if plays < config.TIKTOK_MIN_PLAYS:
+            continue
+        video_url = _tiktok_video_url(item)
+        with_file += bool(video_url)
+        trends[url] = Trend(
+            id="", platform="TikTok", title=one_line(html.unescape(str(item.get("text") or "")))[:200] or "видео без подписи",
+            url=url, views=plays, likes=int(_first(item, "diggCount", "stats.diggCount") or 0),
+            author=str(_first(item, "authorMeta.name", "author.uniqueId", "author.nickname") or ""),
+            published=published, video_url=video_url,
+            duration=round(float(_first(item, "videoMeta.duration", "video.duration", "duration") or 0), 1),
+            thumb_url=str(_first(item, "videoMeta.coverUrl", "video.cover", "covers.default", "cover") or ""))
+    note = ""
+    if items and not with_file:  # подсказка для отладки, если сборщик отдаёт видео под другим полем
+        note = " (без ссылок на файл; поля: " + ", ".join(sorted(items[0])[:25]) + ")"
+    result = sorted(trends.values(), key=lambda t: (t.views, t.likes), reverse=True)
+    return result, len(items), note
+
+
 # ─── проверка ключей ─────────────────────────────────────────────────────
 def youtube_check() -> str:
     data = _get_json(YT_SEARCH, {"part": "snippet", "type": "video", "q": "футбол", "maxResults": 1},
@@ -390,9 +465,18 @@ def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
             report["Instagram"] = f"ошибка: {_safe(error)}"
     else:
         report["Instagram"] = "не подключён (нет секрета APIFY_TOKEN)"
+    tiktok: list[Trend] = []
+    if config.APIFY_TOKEN and config.TIKTOK_QUERIES:
+        try:
+            tiktok, got, note = tiktok_popular()
+            report["TikTok"] = (f"свежих популярных видео: {len(tiktok)} из {got} ≈ "
+                                f"${got * config.TIKTOK_PRICE_PER_VIDEO:.2f}{note}")
+        except Exception as error:
+            log.warning("TikTok недоступен: %s", _safe(error))
+            report["TikTok"] = f"ошибка: {_safe(error)}"
 
     dropped = 0
-    for bucket in (youtube, x_posts, reels):
+    for bucket in (youtube, x_posts, reels, tiktok):
         keep = [t for t in bucket if not other_sport(t)]
         dropped += len(bucket) - len(keep)
         bucket[:] = keep
@@ -402,13 +486,13 @@ def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
     per = config.TRENDS_PER_PLATFORM
     pad = [None] * per
     mixed: list[Trend] = []
-    for trio in zip(youtube[:per] + pad, x_posts[:per] + pad, reels[:per] + pad):
-        mixed += [t for t in trio if t is not None]
+    for row in zip(youtube[:per] + pad, x_posts[:per] + pad, reels[:per] + pad, tiktok[:per] + pad):
+        mixed += [t for t in row if t is not None]
     for number, trend in enumerate(mixed, 1):
         trend.id = f"t{number}"
     if mixed:
-        log.info("Популярное за сутки: YouTube %d, X %d, Instagram %d",
-                 min(len(youtube), per), min(len(x_posts), per), min(len(reels), per))
+        log.info("Популярное за сутки: YouTube %d, X %d, Instagram %d, TikTok %d", min(len(youtube), per),
+                 min(len(x_posts), per), min(len(reels), per), min(len(tiktok), per))
     return mixed, report
 
 

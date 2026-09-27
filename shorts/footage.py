@@ -244,7 +244,10 @@ def get_background(queries: list[str], category: str, duration: float,
 def _download_limited(url: str, path: Path, max_mb: int) -> Path:
     tmp = path.with_suffix(".part")
     size = 0
-    with requests.get(url, stream=True, timeout=60, headers={"User-Agent": config.USER_AGENT}) as response:
+    headers = {"User-Agent": config.USER_AGENT}
+    if "tiktok" in url:  # CDN TikTok отдаёт файл только «со своего сайта»
+        headers["Referer"] = "https://www.tiktok.com/"
+    with requests.get(url, stream=True, timeout=60, headers=headers) as response:
         response.raise_for_status()
         with open(tmp, "wb") as out:
             for chunk in response.iter_content(1 << 20):
@@ -256,10 +259,23 @@ def _download_limited(url: str, path: Path, max_mb: int) -> Path:
     return path
 
 
-def clip_background(popular: list[dict], workdir: Path) -> Background | None:
-    """Самое просматриваемое видео из X про этот же момент — фоном ролика."""
+def clip_background(popular: list[dict], workdir: Path, telegram=None) -> Background | None:
+    """Самое просматриваемое видео про этот же момент — фоном ролика.
+    Если утром видео уже прислано в группу, берём его оттуда (ссылки TikTok и Instagram быстро умирают)."""
     if not config.USE_CLIPS:
         return None
+    if telegram is not None:
+        for post in popular or []:
+            if not post.get("tg_file_id"):
+                continue
+            try:
+                path = telegram.download(post["tg_file_id"], workdir / "clip_tg")
+                if probe_duration(path) >= 2.0:
+                    url = str(post.get("url", ""))
+                    log.info("Фон — видео из группы (%s)", url)
+                    return Background("clip", [path], [url], [f"{_prefix(url)}:{_post_id(url)}"])
+            except Exception as error:
+                log.warning("Видео из группы не скачалось: %s", error)
     candidates = [p for p in popular or [] if p.get("video_url")]
     if config.CLIP_SOURCE == "stands":  # только снятые болельщиками с трибун, не телетрансляции
         candidates = [p for p in candidates if p.get("footage") == "stands"]
@@ -271,15 +287,22 @@ def clip_background(popular: list[dict], workdir: Path) -> Background | None:
             if probe_duration(path) < 2.0:
                 raise RuntimeError("видео короче двух секунд")
         except Exception as error:
-            log.warning("Видео из X не подошло (%s): %s", post.get("url"), error)
+            log.warning("Видео не подошло (%s): %s", post.get("url"), error)
             path.unlink(missing_ok=True)
             path.with_suffix(".part").unlink(missing_ok=True)
             continue
         url = str(post.get("url", ""))
-        prefix = "ig" if "instagram.com" in url else "x"
         log.info("Фон — видео из %s: %s", post.get("platform") or "X", url)
-        return Background("clip", [path], [url], [f"{prefix}:{url.rstrip('/').rsplit('/', 1)[-1]}"])
+        return Background("clip", [path], [url], [f"{_prefix(url)}:{_post_id(url)}"])
     return None
+
+
+def _prefix(url: str) -> str:
+    return "ig" if "instagram.com" in url else "tt" if "tiktok.com" in url else "x"
+
+
+def _post_id(url: str) -> str:
+    return url.rstrip("/").rsplit("/", 1)[-1]
 
 
 def preview_images(trends: list, workdir: Path, count: int = 4, width: int = 640) -> list[bytes]:

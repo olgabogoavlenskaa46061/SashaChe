@@ -256,8 +256,39 @@ def broken_sources(report: dict) -> list[str]:
 def popular_summary(report: dict) -> str:
     """«📈 Популярное за сутки: YouTube — видео: 30; X — постов прочитано: 100 ≈ $0.50»."""
     parts = [f"{k} — {v}" for k, v in report.items()
-             if k in ("YouTube", "X", "Instagram", "Обложки") and not v.startswith("ошибка")]
+             if k in ("YouTube", "X", "Instagram", "TikTok", "Обложки") and not v.startswith("ошибка")]
     return "📈 Популярное за сутки: " + "; ".join(parts) if parts else ""
+
+
+def pin_clip_prepare(script, workdir: Path):
+    """Скачивает видео с трибун для темы сразу, пока ссылка жива (у TikTok и Instagram она быстро умирает).
+    Если не скачалось — убирает ссылку, чтобы в тексте для Саши честно было «видео нет»."""
+    if not config.USE_CLIPS:
+        return None
+    bg = footage.clip_background(script.popular, workdir)
+    if bg is not None:
+        return bg
+    for post in script.popular:  # скачать не вышло ни одно видео — в ролике будут кадры стадиона
+        if post.get("video_url") and (config.CLIP_SOURCE != "stands" or post.get("footage") == "stands"):
+            post["video_url"] = ""
+    return None
+
+
+def pin_clip_send(telegram: Telegram, script, clip, reply_to: int) -> None:
+    """Присылает видео момента в группу ответом на текст и запоминает его — ролик соберётся из него."""
+    url = clip.credits[0] if clip.credits else ""
+    try:
+        if clip.files[0].stat().st_size > 19_500_000:  # бот может скачать из Telegram файл до 20 МБ
+            return
+        sent = telegram.send_clip(clip.files[0], f"🎥 Этот момент — фон для ролика\n{tg_escape(url)}",
+                                  reply_to=reply_to)
+    except Exception as error:
+        log.warning("Не получилось прислать видео момента в группу: %s", error)
+        return
+    media = sent.get("video") or sent.get("document") or sent.get("animation") or {}
+    for post in script.popular:
+        if post.get("url") == url and media.get("file_id"):
+            post["tg_file_id"] = media["file_id"]
 
 
 def first_sentence(text: str) -> str:
@@ -436,7 +467,11 @@ def run_scripts(args) -> int:
         for number, (selection, script) in enumerate(scripts, 1):
             links = topic_links(selection)
             if telegram:
-                sent = telegram.send_message(script_message(script, number, total))
+                with tempfile.TemporaryDirectory() as tmp:
+                    clip = pin_clip_prepare(script, Path(tmp))
+                    sent = telegram.send_message(script_message(script, number, total))
+                    if clip:
+                        pin_clip_send(telegram, script, clip, sent["message_id"])
                 pending.add(data, sent["message_id"], number, script.to_dict(), links)
             preview.append(f"## {number}. {script.hook} ({script.category})\n\n{script.context}\n\n"
                            f"{script.text}\n\nНазвание: {script.title} {' '.join(script.hashtags)}\n")
@@ -517,7 +552,7 @@ def run_check(args) -> int:
 
     checks = (("YouTube", "YOUTUBE_API_KEY", config.YOUTUBE_API_KEY, trends.youtube_check, trends.youtube_hint),
               ("X", "X_BEARER_TOKEN", config.X_BEARER_TOKEN, trends.x_check, trends.x_hint),
-              ("Instagram", "APIFY_TOKEN", config.APIFY_TOKEN, trends.apify_check, lambda e: ""))
+              ("Instagram и TikTok", "APIFY_TOKEN", config.APIFY_TOKEN, trends.apify_check, lambda e: ""))
     for name, secret, value, check, hint in checks:
         if not value:
             add(name, False, f"нет секрета {secret}: проверьте, что название точно «{secret}» и он добавлен "

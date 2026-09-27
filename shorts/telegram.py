@@ -91,6 +91,16 @@ class Telegram:
         """Проверка, что бот может писать в чат из настроек."""
         return self._call("getChat", {"chat_id": self.chat_id})
 
+    def send_clip(self, path: Path, caption: str, reply_to: int | None = None) -> dict:
+        """Исходное видео момента (с трибун) — чтобы Саша видел, о чём говорит. Без звука уведомления."""
+        data = {"chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML",
+                "supports_streaming": "true", "disable_notification": "true"}
+        if reply_to:
+            data["reply_to_message_id"] = reply_to
+            data["allow_sending_without_reply"] = "true"
+        with open(path, "rb") as video:
+            return self._call("sendVideo", data, files={"video": (path.name, video, "video/mp4")}, timeout=300)
+
     # ── входящие ─────────────────────────────────────────────────────────
     def get_updates(self, offset: int | None = None) -> list[dict]:
         data = {"timeout": 0, "limit": 100, "allowed_updates": json.dumps(["message"])}

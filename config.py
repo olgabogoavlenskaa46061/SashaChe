@@ -159,6 +159,19 @@ INSTAGRAM_PER_ACCOUNT = int(_env("INSTAGRAM_PER_ACCOUNT", "4"))   # скольк
 INSTAGRAM_MAX_REELS = int(_env("INSTAGRAM_MAX_REELS", "60"))       # потолок рилсов за день (защита от расходов)
 INSTAGRAM_ACTOR = "apify~instagram-reel-scraper"
 INSTAGRAM_PRICE_PER_REEL = 0.0026
+
+# TikTok — тоже через Apify (тот же APIFY_TOKEN): там больше всего видео болельщиков с трибун.
+# Ищем по запросам, оставляем свежие (до TIKTOK_MAX_AGE_HOURS) и популярные (от TIKTOK_MIN_PLAYS просмотров).
+TIKTOK_ACTOR = _env("TIKTOK_ACTOR", "igolaizola~tiktok-scraper")
+TIKTOK_QUERIES = [q.strip() for q in _env(
+    "TIKTOK_QUERIES",
+    "gol desde la tribuna;golazo desde la grada;hinchada gol;fan view goal stadium;"
+    "football fans stadium goal reaction;гол с трибуны;фанаты на стадионе гол").split(";") if q.strip()]
+TIKTOK_PER_QUERY = int(_env("TIKTOK_PER_QUERY", "20"))
+TIKTOK_MAX_VIDEOS = int(_env("TIKTOK_MAX_VIDEOS", "150"))   # потолок за запуск (≈ $0.03)
+TIKTOK_MIN_PLAYS = int(_env("TIKTOK_MIN_PLAYS", "20000"))
+TIKTOK_MAX_AGE_HOURS = int(_env("TIKTOK_MAX_AGE_HOURS", "48"))
+TIKTOK_PRICE_PER_VIDEO = 0.0002
 TRENDS_PER_PLATFORM = int(_env("TRENDS_PER_PLATFORM", "25"))  # сколько популярных видео с каждой площадки показывать Claude
 
 # Какие видео брать фоном ролика: stands — только снятые болельщиками с трибун (Claude смотрит обложку
