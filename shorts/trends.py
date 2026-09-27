@@ -144,10 +144,32 @@ def _best_mp4(media: dict) -> str:
     return max(pool, key=lambda v: v.get("bit_rate") or 0)["url"]
 
 
-def _x_queries() -> list[tuple[str, int]]:
+_X_USER = "https://api.x.com/2/users/by/username/{name}"
+
+
+def _x_accounts(headers: dict | None = None) -> list[str]:
+    """Аккаунты для оператора from:. Имя из одних цифр (например, 433) X принял бы за номер аккаунта,
+    поэтому такие имена сначала переводим в настоящий номер (одно чтение профиля, $0.01)."""
+    result = []
+    for name in (a.strip().lstrip("@") for a in config.X_ACCOUNTS.split(",") if a.strip()):
+        if not name.isdigit():
+            result.append(name)
+            continue
+        if headers is None:
+            continue
+        try:
+            user = _get_json(_X_USER.format(name=name), {}, headers).get("data") or {}
+            if user.get("id"):
+                result.append(str(user["id"]))
+        except Exception as error:
+            log.warning("Аккаунт X @%s не найден: %s", name, _safe(error))
+    return result
+
+
+def _x_queries(headers: dict | None = None) -> list[tuple[str, int]]:
     """Два запроса: видео больших футбольных аккаунтов и вирусные видео с любых аккаунтов."""
     budget = max(10, config.X_MAX_POSTS)
-    accounts = [a.strip().lstrip("@") for a in config.X_ACCOUNTS.split(",") if a.strip()]
+    accounts = _x_accounts(headers)
     queries = []
     viral = f"({config.X_KEYWORDS}) has:video_link -is:retweet -is:reply min_likes:{config.X_VIRAL_LIKES}"
     if accounts and budget >= 20:
@@ -175,7 +197,7 @@ def x_popular(hours: int = 24) -> tuple[list[Trend], int]:
     since = _since(hours)
     read = 0
     trends: dict[str, Trend] = {}
-    for query, limit in _x_queries():
+    for query, limit in _x_queries(headers):
         params = {"query": query, "start_time": since, "max_results": limit,
                   "tweet.fields": "created_at,public_metrics,attachments",
                   "expansions": "attachments.media_keys",
@@ -249,7 +271,7 @@ def instagram_popular(hours: int = 24) -> tuple[list[Trend], int]:
 
 # ─── проверка ключей ─────────────────────────────────────────────────────
 def youtube_check() -> str:
-    data = _get_json(YT_SEARCH, {"part": "snippet", "type": "video", "q": "football", "maxResults": 1},
+    data = _get_json(YT_SEARCH, {"part": "snippet", "type": "video", "q": "футбол", "maxResults": 1},
                      {"X-Goog-Api-Key": config.YOUTUBE_API_KEY})
     items = data.get("items") or []
     if not items:
@@ -272,7 +294,8 @@ def youtube_hint(error: str) -> str:
 
 
 def x_check() -> str:
-    data = _get_json(X_SEARCH, {"query": "from:433 -is:retweet", "max_results": 10, "tweet.fields": "public_metrics"},
+    data = _get_json(X_SEARCH, {"query": "(football OR soccer) has:media -is:retweet", "max_results": 10,
+                                "tweet.fields": "public_metrics"},
                      {"Authorization": f"Bearer {config.X_BEARER_TOKEN}"})
     read = len(data.get("data") or [])
     return f"токен работает (для проверки прочитано постов: {read} ≈ ${read * config.X_PRICE_PER_POST:.2f})"

@@ -128,7 +128,7 @@ YOUTUBE_API_KEY = _env("YOUTUBE_API_KEY")   # бесплатно: console.cloud.
 X_BEARER_TOKEN = _env("X_BEARER_TOKEN")     # платно: console.x.com, $0.005 за пост
 
 # Запросы к YouTube: (что искать, страна, язык).
-YOUTUBE_QUERIES = [("футбол", "RU", "ru"), ("football", "GB", "en")]
+YOUTUBE_QUERIES = [("футбол", "RU", "ru"), ("football", "GB", "en"), ("soccer", "US", "en")]
 YOUTUBE_PER_QUERY = 25
 
 # X: большие футбольные аккаунты с видео и слова для поиска вирусных видео с любых аккаунтов.
