@@ -239,6 +239,14 @@ def popular_summary(report: dict) -> str:
     return "📈 Популярное за сутки: " + "; ".join(parts) if parts else ""
 
 
+def first_sentence(text: str) -> str:
+    """Первая фраза текста — хук."""
+    for mark in ("?", "!", "."):
+        if mark in text:
+            return text.split(mark, 1)[0].strip() + mark
+    return text.strip()[:120]
+
+
 def topic_links(selection) -> list[str]:
     """Ссылки темы для истории: новости и все видео про этот момент — чтобы он не вернулся с другой площадки."""
     return list(dict.fromkeys([i.link for i in selection.item.all_items] + [t.url for t in selection.trends]))
@@ -378,7 +386,9 @@ def run_scripts(args) -> int:
         for selection in selections:
             try:
                 material, images = material_for(selection)
-                script = ed.write_script(selection, material, today_text, reader="human", images=images)
+                hooks = [first_sentence(sc.text) for _, sc in scripts]
+                script = ed.write_script(selection, material, today_text, reader="human", images=images,
+                                         other_hooks=hooks)
                 script.popular = [t.to_dict() for t in selection.trends]
                 scripts.append((selection, script))
                 log.info("Текст «%s» (%s, %d слов)", script.hook, script.category, script.words)

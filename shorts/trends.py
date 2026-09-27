@@ -225,7 +225,11 @@ def x_popular(hours: int = 24) -> tuple[list[Trend], int]:
             if "HTTP 400" not in str(error):
                 raise
             log.warning("X не принял запрос (%s) — пробую попроще", error)
-            data = _get_json(X_SEARCH, {**params, "query": _simplify(query)}, headers)
+            try:
+                data = _get_json(X_SEARCH, {**params, "query": _simplify(query)}, headers)
+            except RuntimeError as again:  # один неудачный запрос не должен ломать остальные
+                log.warning("X не принял и упрощённый запрос: %s", again)
+                continue
         posts = data.get("data") or []
         read += len(posts)
         media = {m.get("media_key"): m for m in (data.get("includes") or {}).get("media", [])}

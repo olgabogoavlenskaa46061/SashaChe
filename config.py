@@ -139,8 +139,9 @@ X_ACCOUNTS = _env("X_ACCOUNTS", "433,brfootball,goal,ESPNFC,OneFootball,TrollFoo
 X_KEYWORDS = ('soccer OR fútbol OR futbol OR golazo OR футбол OR "Premier League" OR LaLiga OR "Champions League" '
               'OR Messi OR Ronaldo OR Mbappe OR Yamal OR Vinicius OR Haaland OR "Real Madrid" OR Barcelona')
 # Видео болельщиков с трибун: такие слова в подписи + что-то про футбол.
-X_STANDS_WORDS = ('"from the stands" OR "fan footage" OR "fan view" OR "fans view" OR "desde la tribuna" '
-                  'OR "desde la grada" OR "с трибуны" OR "с трибун"')
+# 🎥 / 📹 @автор — так медиа подписывают видео, снятые болельщиками.
+X_STANDS_WORDS = ('"from the stands" OR "fan footage" OR "fan view" OR fancam OR "fan cam" OR "desde la tribuna" '
+                  'OR "desde la grada" OR "с трибуны" OR "с трибун" OR 🎥 OR 📹')
 X_STANDS_CONTEXT = "soccer OR fútbol OR futbol OR football OR футбол OR gol OR goal OR golazo"
 X_STANDS_LIKES = int(_env("X_STANDS_LIKES", "300"))
 X_MAX_POSTS = int(_env("X_MAX_POSTS", "100"))       # сколько постов читать за день ($0.005 за каждый)
