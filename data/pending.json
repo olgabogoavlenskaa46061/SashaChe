@@ -587,7 +587,7 @@
    "created": "2026-09-27T05:27+03:00",
    "number": 1,
    "message_id": 33,
-   "status": "waiting",
+   "status": "done",
    "script": {
     "category": "главное",
     "hook": "Верон гонится за судьёй",
@@ -704,7 +704,10 @@
     "https://x.com/i/web/status/2103930541938512285",
     "https://x.com/i/web/status/2103930691767480504"
    ],
-   "videos": []
+   "videos": [
+    "01_veron-gonitsya-za-sudey.mp4",
+    "01_veron-gonitsya-za-sudey_v2.mp4"
+   ]
   },
   {
    "id": "20260927-2",
@@ -761,5 +764,5 @@
    "videos": []
   }
  ],
- "last_update_id": 356227875
+ "last_update_id": 356227878
 }
