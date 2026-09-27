@@ -1,8 +1,10 @@
 """Фон для роликов.
 
-Порядок: свои кадры из папки assets/footage → бесплатные стоковые видео Pexels
+Порядок: видео из X про этот же момент (если тема совпала с популярным видео и USE_CLIPS=1)
+→ свои кадры из папки assets/footage → бесплатные стоковые видео Pexels
 (их лицензия разрешает использовать ролики без оплаты) → нарисованное футбольное поле.
-Кадры из матчей и фото из новостей не используются — на них чужие права.
+Видео из X — чужие: права на них у авторов и правообладателей, за такие ролики
+YouTube может выдать страйк. Отключить: USE_CLIPS=0.
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFilter
 
 import config
+from .voice import probe_duration
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +31,7 @@ VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 
 @dataclass
 class Background:
-    kind: str                         # "video" или "image"
+    kind: str                         # "clip" (видео из X), "video" (стоковые кадры) или "image"
     files: list[Path]
     credits: list[str] = field(default_factory=list)
     footage_ids: list[str] = field(default_factory=list)
@@ -233,3 +236,42 @@ def get_background(queries: list[str], category: str, duration: float,
         log.warning("Pexels недоступен: %s", error)
     path = generated_background(category, workdir / "background.png", seed)
     return Background("image", [path])
+
+
+# ─── видео из X ──────────────────────────────────────────────────────────
+def _download_limited(url: str, path: Path, max_mb: int) -> Path:
+    tmp = path.with_suffix(".part")
+    size = 0
+    with requests.get(url, stream=True, timeout=60, headers={"User-Agent": config.USER_AGENT}) as response:
+        response.raise_for_status()
+        with open(tmp, "wb") as out:
+            for chunk in response.iter_content(1 << 20):
+                size += len(chunk)
+                if size > max_mb * 1_000_000:
+                    raise RuntimeError(f"видео больше {max_mb} МБ")
+                out.write(chunk)
+    tmp.replace(path)
+    return path
+
+
+def clip_background(popular: list[dict], workdir: Path) -> Background | None:
+    """Самое просматриваемое видео из X про этот же момент — фоном ролика."""
+    if not config.USE_CLIPS:
+        return None
+    candidates = [p for p in popular or [] if p.get("video_url")]
+    candidates.sort(key=lambda p: (p.get("views") or 0, p.get("likes") or 0), reverse=True)
+    for number, post in enumerate(candidates[:3], 1):
+        path = workdir / f"clip_{number}.mp4"
+        try:
+            _download_limited(post["video_url"], path, config.CLIP_MAX_MB)
+            if probe_duration(path) < 2.0:
+                raise RuntimeError("видео короче двух секунд")
+        except Exception as error:
+            log.warning("Видео из X не подошло (%s): %s", post.get("url"), error)
+            path.unlink(missing_ok=True)
+            path.with_suffix(".part").unlink(missing_ok=True)
+            continue
+        post_id = str(post.get("url", "")).rstrip("/").rsplit("/", 1)[-1]
+        log.info("Фон — видео из X: %s", post.get("url"))
+        return Background("clip", [path], [post.get("url", "")], [f"x:{post_id}"])
+    return None

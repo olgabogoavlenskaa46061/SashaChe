@@ -12,6 +12,11 @@ from .collector import NewsItem
 
 log = logging.getLogger(__name__)
 
+def _count(n: int) -> str:
+    from .trends import human_count
+    return human_count(n)
+
+
 # Цены за 1 млн токенов (вход, выход) — только для примерной оценки в логе.
 _PRICES = {"claude-sonnet-5": (2.0, 10.0), "claude-haiku-4-5-20251001": (1.0, 5.0)}
 
@@ -21,6 +26,7 @@ class Selection:
     item: NewsItem
     category: str
     why: str
+    trends: list = field(default_factory=list)  # популярные видео про этот момент (trends.Trend)
 
 
 @dataclass
@@ -35,6 +41,7 @@ class Script:
     mood: str
     sources: list[tuple[str, str]] = field(default_factory=list)  # (название, ссылка)
     context: str = ""  # суть новости в двух словах — для того, кто читает текст
+    popular: list[dict] = field(default_factory=list)  # популярные видео про этот момент (YouTube, X)
 
     @property
     def words(self) -> int:
@@ -43,7 +50,7 @@ class Script:
     def to_dict(self) -> dict:
         return {k: getattr(self, k) for k in (
             "category", "hook", "text", "title", "description", "hashtags",
-            "footage_queries", "mood", "sources", "context")}
+            "footage_queries", "mood", "sources", "context", "popular")}
 
     @classmethod
     def from_dict(cls, data: dict) -> "Script":
@@ -97,8 +104,10 @@ class Editor:
 
     # ── 1. Выбор тем ─────────────────────────────────────────────────────
     def select(self, stories: list[NewsItem], mix: dict[str, int],
-               recent_titles: list[str], max_items: int = 320) -> list[Selection]:
+               recent_titles: list[str], max_items: int = 320, trends: list | None = None) -> list[Selection]:
         tz = ZoneInfo(config.TIMEZONE)
+        trends = list(trends or [])
+        trend_by_id = {t.id: t for t in trends}
         by_id = {s.id: s for s in stories[:max_items]}
         lines = []
         for story in stories[:max_items]:
@@ -150,6 +159,14 @@ class Editor:
 {recent}
 
 Верни темы в порядке от самой сильной к слабой. В поле id — ровно тот id, что в квадратных скобках."""
+        if trends:
+            system += """
+
+Популярное за сутки. После ленты новостей — список самых просматриваемых футбольных видео за сутки на YouTube и в X. Это главный сигнал, что сейчас интересно зрителям:
+- Если сюжет из ленты — это тот же момент, что и популярное видео (тот же гол, эпизод, выходка, заявление), бери такой сюжет в первую очередь, даже если о нём мало пишут.
+- В поле trends перечисли id этих видео (например, t3) — только если это точно тот же момент. Если совпадений нет — пустой список.
+- Видео, которому нет пары в ленте, темой быть не может: факты для текста берутся только из новостей.
+- Хайлайты целых матчей, подборки, стримы и медиафутбол — слабый сигнал, в первую очередь смотри на отдельные яркие моменты."""
 
         schema = {
             "type": "object",
@@ -172,6 +189,21 @@ class Editor:
             "additionalProperties": False,
         }
         user = "Лента новостей за сутки (id · время по Москве · источники · заголовок — анонс):\n\n" + "\n".join(lines)
+        if trends:
+            item_schema = schema["properties"]["stories"]["items"]
+            item_schema["properties"]["trends"] = {
+                "type": "array", "items": {"type": "string"},
+                "description": "id популярных видео (t1, t2…) про этот же момент; пусто, если таких нет"}
+            item_schema["required"].append("trends")
+            popular = []
+            for t in trends:
+                stats = " · ".join(x for x in (
+                    f"{_count(t.views)} просмотров" if t.views else "",
+                    f"{_count(t.likes)} лайков" if t.likes else "") if x)
+                author = f" ({t.author})" if t.author else ""
+                popular.append(f"[{t.id}] {t.platform} · {stats} · «{t.title}»{author}")
+            user += ("\n\nПопулярное за сутки (id · площадка · просмотры · лайки · название или текст поста):\n\n"
+                     + "\n".join(popular))
         data = self._ask(system, user, schema, max_tokens=2500)
 
         result: list[Selection] = []
@@ -181,11 +213,17 @@ class Editor:
             if item is None or item.id in used:
                 continue
             category = row.get("category") if row.get("category") in config.CATEGORIES else "главное"
-            result.append(Selection(item=item, category=category, why=row.get("why", "")))
+            matched = []
+            for trend_id in row.get("trends") or []:
+                trend = trend_by_id.get(str(trend_id).strip("[] "))
+                if trend is not None and trend not in matched:
+                    matched.append(trend)
+            result.append(Selection(item=item, category=category, why=row.get("why", ""), trends=matched))
             used.add(item.id)
             if len(result) >= total:
                 break
-        log.info("Выбрано тем: %d из %d", len(result), total)
+        log.info("Выбрано тем: %d из %d (совпали с популярными видео: %d)", len(result), total,
+                 sum(1 for r in result if r.trends))
         return result
 
     # ── 2. Сценарий ──────────────────────────────────────────────────────

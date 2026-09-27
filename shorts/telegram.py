@@ -198,6 +198,13 @@ def script_message(script, number: int, total: int) -> str:
         f"<b>Текст (~{seconds} сек):</b>",
         f"<blockquote>{tg_escape(script.text)}</blockquote>",
         f"Источники: {_sources_line(script.sources)}",
+    ]
+    popular = popular_line(script.popular)
+    if popular:
+        parts.append(popular)
+        if config.USE_CLIPS and any(p.get("video_url") for p in script.popular):
+            parts.append("🎬 Фоном ролика будет видео из X про этот момент.")
+    parts += [
         "",
         "↩️ Ответьте на это сообщение голосовым — соберу ролик. "
         "Ответ «бот» — озвучу сам, ответ текстом — озвучу ваш текст.",
@@ -205,8 +212,20 @@ def script_message(script, number: int, total: int) -> str:
     return "\n".join(parts)
 
 
-def video_caption(script, number: int, credits: list[str], engine: str) -> str:
-    """Подпись к готовому ролику: название с хештегами и описание — готово к копированию."""
+def popular_line(popular: list[dict]) -> str:
+    """«🔥 Смотрят: YouTube · 3,2 млн просмотров, X · 850 тыс. просмотров» со ссылками."""
+    from .trends import Trend
+    links = []
+    for data in (popular or [])[:3]:
+        trend = Trend.from_dict(data)
+        if trend.url:
+            links.append(f'<a href="{tg_escape(trend.url)}">{tg_escape(trend.label())}</a>')
+    return "🔥 Смотрят: " + ", ".join(links) if links else ""
+
+
+def video_caption(script, number: int, credits: list[str], engine: str, clip_url: str | None = None) -> str:
+    """Подпись к готовому ролику: название с хештегами и описание — готово к копированию.
+    clip_url — если фоном стало видео из X: ссылка на него попадает в описание."""
     tags = " ".join(script.hashtags)
     sources = _sources_line(script.sources)
     if config.VIDEO_STYLE == "sasha":
@@ -219,14 +238,15 @@ def video_caption(script, number: int, credits: list[str], engine: str) -> str:
         label = config.CATEGORIES[script.category]["label"]
         head = f"{emoji} <b>{number}. {tg_escape(label)}</b>\n\n<b>{tg_escape(script.title)}</b>\n\n"
         tail = f"\n\n{tg_escape(tags)}\n\nИсточники: {sources}"
-    if credits:
+    if credits and not clip_url:
         tail += f"\nФон: {tg_escape(', '.join(credits[:3]))}"
     if engine == "gtts":
         tail += "\n⚠️ Озвучка запасным голосом"
     elif engine == "silent":
         tail += "\n⚠️ Без озвучки: сервис голоса был недоступен"
     body = tg_escape(script.description)
-    limit = 1024 - len(head) - len(tail) - 20
+    video = f"\n\nВидео: {tg_escape(clip_url)}" if clip_url else ""
+    limit = 1024 - len(head) - len(tail) - len(video) - 20
     if len(body) > limit:
         body = body[:max(0, limit)].rsplit(" ", 1)[0] + "…"
-    return head + body + tail
+    return head + body + video + tail

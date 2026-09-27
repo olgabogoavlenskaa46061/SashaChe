@@ -40,8 +40,9 @@ def _build(item: dict, message: dict, media: dict | None, text: str,
                 script.text = text  # Саша прислал свой вариант текста
             speech = voice.synthesize(script.text, work / "voice.mp3")
         seed = int(now.strftime("%j")) * 10 + item["number"] + take
-        bg = footage.get_background(script.footage_queries, script.category, speech.duration + 1.0,
-                                    work, history.used_footage(hist), seed=seed)
+        bg = footage.clip_background(script.popular, work) or footage.get_background(
+            script.footage_queries, script.category, speech.duration + 1.0,
+            work, history.used_footage(hist), seed=seed)
         music = render.pick_music(script.mood)
         out = day_dir / f"{slug}.mp4"
         info = render.render_short(script.category, script.hook, speech, bg, out,
@@ -50,7 +51,8 @@ def _build(item: dict, message: dict, media: dict | None, text: str,
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
-    telegram.send_video(out, video_caption(script, item["number"], bg.credits, speech.engine),
+    clip_url = bg.credits[0] if bg.kind == "clip" and bg.credits else None
+    telegram.send_video(out, video_caption(script, item["number"], bg.credits, speech.engine, clip_url),
                         info["duration"], reply_to=message["message_id"])
     history.remember_footage(hist, bg.footage_ids)
     meta = {**script.to_dict(), "voice": speech.engine, "background": bg.kind,

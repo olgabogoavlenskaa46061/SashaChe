@@ -6,6 +6,7 @@ Python дорисовывает поверх плашку рубрики, заг
 """
 from __future__ import annotations
 
+import json
 import logging
 import math
 import random
@@ -326,9 +327,24 @@ def _motion_focus(clip: Path, start: float, length: float) -> tuple[float, float
     """Где в кадре больше всего движения (доли ширины и высоты видимой части кадра).
     По этой точке повтор «приближает» самое интересное."""
     w, h = 54, 96
+    return _focus_from(clip, start, length, w, h,
+                       f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},scale={w}:{h}")
+
+
+def _motion_focus_full(clip: Path, start: float, length: float, width: int, height: int
+                       ) -> tuple[float, float] | None:
+    """То же, но по всему кадру исходного видео (для видео из X любой ориентации)."""
+    if width >= height:
+        w, h = 96, max(8, int(round(96 * height / max(1, width))))
+    else:
+        w, h = max(8, int(round(96 * width / max(1, height)))), 96
+    return _focus_from(clip, start, length, w, h, f"scale={w}:{h}")
+
+
+def _focus_from(clip: Path, start: float, length: float, w: int, h: int, scale: str
+                ) -> tuple[float, float] | None:
     cmd = ["ffmpeg", "-v", "error", "-ss", f"{start:.3f}", "-t", f"{max(length, 0.5):.3f}", "-i", str(clip),
-           "-vf", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},scale={w}:{h},fps=10,format=gray",
-           "-f", "rawvideo", "pipe:1"]
+           "-vf", f"{scale},fps=10,format=gray", "-f", "rawvideo", "pipe:1"]
     try:
         raw = subprocess.run(cmd, capture_output=True, timeout=60).stdout
     except Exception:
@@ -347,6 +363,160 @@ def _motion_focus(clip: Path, start: float, length: float) -> tuple[float, float
     return (x + 0.5) / w, (y + 0.5) / h
 
 
+# ─── видео из X как фон ──────────────────────────────────────────────────
+@dataclass(frozen=True)
+class ClipPlan:
+    start: float           # откуда начинается основная часть ролика
+    replay_start: float    # откуда берётся повтор (яркий момент)
+    focus: tuple           # точка интереса в полном кадре (доли ширины и высоты)
+    width: int
+    height: int
+    has_audio: bool
+    length: float
+
+
+def _probe_video(path: Path) -> tuple[int, int, bool, float]:
+    """Размер кадра (с учётом поворота), есть ли звук и длина видео."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries",
+         "stream=codec_type,width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
+         "-of", "json", str(path)], capture_output=True, text=True, timeout=60).stdout
+    data = json.loads(out or "{}")
+    streams = data.get("streams", [])
+    video = next((st for st in streams if st.get("codec_type") == "video"), {})
+    width, height = int(video.get("width") or W), int(video.get("height") or H)
+    rotation = (video.get("tags") or {}).get("rotate") or next(
+        (sd.get("rotation") for sd in video.get("side_data_list") or [] if "rotation" in sd), 0)
+    try:
+        if abs(int(float(rotation))) % 180 == 90:
+            width, height = height, width
+    except (TypeError, ValueError):
+        pass
+    has_audio = any(st.get("codec_type") == "audio" for st in streams)
+    duration = float((data.get("format") or {}).get("duration") or 0)
+    return width, height, has_audio, duration
+
+
+def _motion_profile(clip: Path, fps: int) -> np.ndarray | None:
+    """Сколько движения в каждом кадре (без склеек и смен камеры)."""
+    w, h = 64, 36
+    cmd = ["ffmpeg", "-v", "error", "-i", str(clip), "-vf", f"scale={w}:{h},fps={fps},format=gray",
+           "-f", "rawvideo", "pipe:1"]
+    try:
+        raw = subprocess.run(cmd, capture_output=True, timeout=180).stdout
+    except Exception:
+        return None
+    n = len(raw) // (w * h)
+    if n < 4:
+        return None
+    frames = np.frombuffer(raw[: n * w * h], dtype=np.uint8).reshape(n, h, w).astype(np.float32)
+    diff = np.abs(np.diff(frames, axis=0)).mean(axis=(1, 2))
+    median = float(np.median(diff))
+    diff[diff > max(18.0, 4 * median)] = median  # склейка — это не движение
+    return diff
+
+
+def _audio_profile(clip: Path, fps: int) -> np.ndarray | None:
+    """Громкость звука (дБ) с шагом 1/fps секунды."""
+    rate = 8000
+    cmd = ["ffmpeg", "-v", "error", "-i", str(clip), "-vn", "-ac", "1", "-ar", str(rate), "-f", "s16le", "pipe:1"]
+    try:
+        raw = subprocess.run(cmd, capture_output=True, timeout=180).stdout
+    except Exception:
+        return None
+    samples = np.frombuffer(raw[: len(raw) // 2 * 2], dtype=np.int16).astype(np.float32)
+    hop = rate // fps
+    n = len(samples) // hop
+    if n < 4:
+        return None
+    frames = samples[: n * hop].reshape(n, hop)
+    return 20 * np.log10(np.sqrt((frames ** 2).mean(axis=1)) + 1.0)
+
+
+def _key_window(clip: Path, length: float, window: float, has_audio: bool) -> float:
+    """Начало самого яркого момента длиной window секунд.
+
+    Сначала ищем всплеск звука — рёв трибун или крик комментатора звучат сразу после гола,
+    поэтому момент берём чуть раньше всплеска. Если звука нет или он ровный (видео под музыку),
+    ищем отрезок с наибольшим движением в кадре."""
+    fps = 6
+    if length <= window + 0.2:
+        return 0.0
+    latest = length - window - 0.1
+    if has_audio:
+        loud = _audio_profile(clip, fps)
+        if loud is not None and len(loud) > 2 * fps:
+            smooth = np.convolve(loud, np.ones(3) / 3, mode="same")
+            peak = int(np.argmax(smooth))
+            if smooth[peak] - float(np.median(smooth)) >= 6.0:
+                return float(min(max(0.0, peak / fps - window * 0.75), latest))
+    motion = _motion_profile(clip, fps)
+    if motion is not None:
+        win = max(1, int(round(window * fps)))
+        if len(motion) > win:
+            sums = np.convolve(motion, np.ones(win), mode="valid")
+            return float(min(max(0.0, int(np.argmax(sums)) / fps), latest))
+    return float(min(max(0.0, length * 0.55 - window / 2), latest))
+
+
+@lru_cache(maxsize=8)
+def _clip_plan(clip: str, main_len: float, replay_len: float) -> ClipPlan:
+    path = Path(clip)
+    width, height, has_audio, length = _probe_video(path)
+    length = length or _clip_len(path)
+    source = replay_len * config.REPLAY_SPEED
+    key = _key_window(path, length, source, has_audio) if source > 0 else max(0.0, length * 0.3)
+    if length <= main_len + 0.2:
+        start = 0.0  # видео короче голоса — крутим по кругу
+    else:
+        # основная часть заканчивается чуть позже яркого момента, дальше — его повтор
+        start = min(max(0.0, key + source + 0.8 - main_len), length - main_len - 0.1)
+    focus = (_motion_focus_full(path, key, source, width, height) if source > 0 else None) or (0.5, 0.45)
+    log.info("Видео из X: %dx%d, %.1f с, звук: %s, яркий момент с %.1f с", width, height, length,
+             "есть" if has_audio else "нет", key)
+    return ClipPlan(round(start, 3), round(key, 3), focus, width, height, has_audio, length)
+
+
+def _clip_main_filter(idx: int, plan: ClipPlan, main_len: float) -> str:
+    """Основная часть: вертикальное видео — на весь экран; горизонтальное — крупно по центру
+    на размытом фоне из того же видео."""
+    tail = f"setsar=1,fps={FPS},format=yuv420p,trim=duration={main_len:.3f},setpts=PTS-STARTPTS[s{idx}]"
+    ratio = plan.width / max(1, plan.height)
+    if ratio <= 0.8:
+        return (f"[{idx}:v]scale={W}:{H}:force_original_aspect_ratio=increase:flags=bicubic,"
+                f"crop={W}:{H},{tail}")
+    fg_w = max(W, int(W * (config.CLIP_ZOOM if ratio >= 1.2 else 1.0)) // 2 * 2)
+    fg_h = min(H, int(round(fg_w / ratio / 2)) * 2)
+    crop = f",crop={W}:{fg_h}" if fg_w > W else ""
+    small_w, small_h = W // 4, H // 4
+    return (f"[{idx}:v]split=2[c{idx}a][c{idx}b];"
+            f"[c{idx}a]scale={small_w}:{small_h}:force_original_aspect_ratio=increase,crop={small_w}:{small_h},"
+            f"boxblur=10:2,eq=brightness=-0.12:saturation=0.85,scale={W}:{H}:flags=bilinear[c{idx}bg];"
+            f"[c{idx}b]scale={fg_w}:{fg_h}:flags=bicubic{crop}[c{idx}fg];"
+            f"[c{idx}bg][c{idx}fg]overlay=0:{(H - fg_h) // 2},{tail}")
+
+
+def _clip_replay_filter(idx: int, plan: ClipPlan, replay_len: float) -> str:
+    """Повтор яркого момента: на весь экран, крупно вокруг точки интереса, замедленно."""
+    w0, h0 = plan.width, plan.height
+    zoom = config.REPLAY_ZOOM if w0 / max(1, h0) <= 0.8 else 1.0  # горизонтальное и так станет крупнее
+    base_h = min(h0, w0 * 16 / 9)
+    ch = max(16, int(base_h / zoom) // 2 * 2)
+    cw = max(16, int(ch * 9 / 16) // 2 * 2)
+    fx, fy = plan.focus
+    cx = int(min(max(0.0, fx * w0 - cw / 2), w0 - cw)) // 2 * 2
+    cy = int(min(max(0.0, fy * h0 - ch / 2), h0 - ch)) // 2 * 2
+    return (f"[{idx}:v]crop={cw}:{ch}:{cx}:{cy},scale={W}:{H}:flags=bicubic,setsar=1,"
+            f"setpts=(PTS-STARTPTS)/{config.REPLAY_SPEED},fps={FPS},format=yuv420p,"
+            f"trim=duration={replay_len:.3f},setpts=PTS-STARTPTS[s{idx}]")
+
+
+def _split(total: float, style: str) -> tuple[float, float]:
+    """Длина основной части и повтора в конце."""
+    replay_len = replay_length(total) if style == "sasha" else 0.0
+    return total - replay_len, replay_len
+
+
 def replay_length(total: float) -> float:
     """Длина повтора в конце ролика (стиль sasha)."""
     if total < 9:
@@ -359,13 +529,24 @@ def _video_graph(bg: Background, total: float, seed: int, style: str) -> tuple[l
     В стиле sasha в конце добавляется повтор последнего плана: зум и замедление."""
     rng = random.Random(seed)
     replay = style == "sasha"
-    replay_len = replay_length(total) if replay else 0.0
-    main_len = total - replay_len
+    main_len, replay_len = _split(total, style)
     zoom = config.REPLAY_ZOOM
     args: list[str] = []
     filters: list[str] = []
     idx = 0
-    if bg.kind == "video" and bg.files:
+    if bg.kind == "clip" and bg.files:
+        clip = bg.files[0]
+        plan = _clip_plan(str(clip), round(main_len, 3), round(replay_len, 3))
+        args += ["-stream_loop", "-1", "-ss", f"{plan.start:.3f}", "-t", f"{main_len + 0.2:.3f}", "-i", str(clip)]
+        filters.append(_clip_main_filter(idx, plan, main_len))
+        idx += 1
+        if replay:
+            source_len = replay_len * config.REPLAY_SPEED
+            args += ["-stream_loop", "-1", "-ss", f"{plan.replay_start:.3f}", "-t", f"{source_len + 0.3:.3f}",
+                     "-i", str(clip)]
+            filters.append(_clip_replay_filter(idx, plan, replay_len))
+            idx += 1
+    elif bg.kind == "video" and bg.files:
         n = max(1, math.ceil(main_len / config.SEGMENT_SECONDS))
         seg = main_len / n
         order = list(bg.files)
@@ -422,21 +603,43 @@ def _video_graph(bg: Background, total: float, seed: int, style: str) -> tuple[l
 
 
 def _audio_graph(first_input: int, speech: Speech, music: Path | None, total: float,
-                 lead: float) -> tuple[list[str], list[str]]:
-    """Голос с задержкой lead и, если есть, тихая музыка под ним → метка [a]."""
+                 lead: float, bed: tuple[Path, float, float] | None = None) -> tuple[list[str], list[str]]:
+    """Голос с задержкой lead; под ним, если есть, тихая музыка и звук исходного видео → метка [a].
+    bed — (видео, с какой секунды, сколько секунд): звук видео из X под основной частью."""
     args = ["-i", str(speech.audio)]
     lead_ms = int(lead * 1000)
-    graph = [f"[{first_input}:a]aresample=48000,adelay={lead_ms}:all=1,apad[vo]"]
+    stereo = ",aformat=sample_rates=48000:channel_layouts=stereo" if (music or bed) else ""
+    graph = [f"[{first_input}:a]aresample=48000,adelay={lead_ms}:all=1{stereo},apad[vo]"]
+    mix, nxt = ["[vo]"], first_input + 1
     if music:
         args += ["-stream_loop", "-1", "-i", str(music)]
         fade_out = max(0.0, total - 1.6)
-        graph.append(f"[{first_input + 1}:a]aresample=48000,volume={config.MUSIC_VOLUME},"
+        graph.append(f"[{nxt}:a]aresample=48000{stereo},volume={config.MUSIC_VOLUME},"
                      f"afade=t=in:st=0:d=0.8,afade=t=out:st={fade_out:.2f}:d=1.5[mu]")
-        graph.append("[vo][mu]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+        mix.append("[mu]")
+        nxt += 1
+    if bed:
+        clip, start, length = bed
+        args += ["-stream_loop", "-1", "-ss", f"{start:.3f}", "-t", f"{length + 0.2:.3f}", "-i", str(clip)]
+        graph.append(f"[{nxt}:a]aresample=48000{stereo},volume={config.CLIP_VOLUME},"
+                     f"afade=t=in:st=0:d=0.3,afade=t=out:st={max(0.0, length - 0.8):.2f}:d=0.8,apad[bd]")
+        mix.append("[bd]")
+        nxt += 1
+    if len(mix) > 1:
+        graph.append(f"{''.join(mix)}amix=inputs={len(mix)}:duration=first:dropout_transition=0:normalize=0,"
                      "alimiter=limit=0.95[a]")
     else:
         graph.append("[vo]anull[a]")
     return args, graph
+
+
+def _clip_bed(background: Background, total: float, style: str) -> tuple[Path, float, float] | None:
+    """Звук видео из X под основной частью ролика (если в видео есть звук и он включён)."""
+    if background.kind != "clip" or not background.files or config.CLIP_VOLUME <= 0:
+        return None
+    main_len, replay_len = _split(total, style)
+    plan = _clip_plan(str(background.files[0]), round(main_len, 3), round(replay_len, 3))
+    return (background.files[0], plan.start, main_len) if plan.has_audio else None
 
 
 ENCODE = ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(config.VIDEO_CRF),
@@ -474,7 +677,7 @@ def _render_direct(background: Background, speech: Speech, music: Path | None, t
                    lead: float, out_path: Path, seed: int, style: str) -> None:
     """Ролик без надписей: весь монтаж делает один вызов ffmpeg (быстро)."""
     v_args, v_graph, n = _video_graph(background, total, seed, style)
-    a_args, a_graph = _audio_graph(n, speech, music, total, lead)
+    a_args, a_graph = _audio_graph(n, speech, music, total, lead, _clip_bed(background, total, style))
     cmd = (["ffmpeg", "-y", "-v", "error", "-nostdin"] + v_args + a_args
            + ["-filter_complex", ";".join(v_graph + a_graph), "-map", "[bg]", "-map", "[a]",
               "-t", f"{total:.3f}"] + ENCODE + [str(out_path)])
@@ -515,7 +718,7 @@ def render_short(category: str, hook: str, speech: Speech, background: Backgroun
 
     with tempfile.TemporaryDirectory() as tmp:
         if style == "news":
-            soft = background.kind != "video"
+            soft = background.kind not in ("video", "clip")
             gradient = _gradient_png(Path(tmp) / "gradient.png", *((110, 130, 0) if soft else (185, 200, 45)))
         else:
             gradient = _gradient_png(Path(tmp) / "gradient.png", 0, 150, 0)  # только под субтитры
@@ -525,7 +728,7 @@ def render_short(category: str, hook: str, speech: Speech, background: Backgroun
         dec_cmd = (["ffmpeg", "-v", "error", "-nostdin"] + v_args
                    + ["-filter_complex", ";".join(v_graph), "-map", "[out]", "-t", f"{total:.3f}",
                       "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"])
-        a_args, a_graph = _audio_graph(1, speech, music, total, lead)
+        a_args, a_graph = _audio_graph(1, speech, music, total, lead, _clip_bed(background, total, style))
         enc_cmd = (["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
                     "-s", f"{W}x{H}", "-r", str(FPS), "-i", "pipe:0"] + a_args
                    + ["-filter_complex", ";".join(a_graph), "-map", "0:v", "-map", "[a]",

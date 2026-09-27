@@ -115,6 +115,33 @@ SKIP_PATTERNS = [
     r"\bprediction", r"\btips\b", r"how to watch", r"tv channel", r"live stream",
 ]
 
+# ─── Популярное: YouTube и X (необязательно) ─────────────────────────────
+# Самые просматриваемые футбольные видео за сутки. Claude в первую очередь берёт темы,
+# которые с ними совпадают, а видео из X становится фоном ролика.
+YOUTUBE_API_KEY = _env("YOUTUBE_API_KEY")   # бесплатно: console.cloud.google.com
+X_BEARER_TOKEN = _env("X_BEARER_TOKEN")     # платно: console.x.com, $0.005 за пост
+
+# Запросы к YouTube: (что искать, страна, язык).
+YOUTUBE_QUERIES = [("футбол", "RU", "ru"), ("football", "GB", "en")]
+YOUTUBE_PER_QUERY = 25
+
+# X: большие футбольные аккаунты с видео и слова для поиска вирусных видео с любых аккаунтов.
+X_ACCOUNTS = _env("X_ACCOUNTS", "433,brfootball,goal,ESPNFC,SkySportsPL,OneFootball,TrollFootball,"
+                                "sportbible,FCBarcelona,realmadrid")
+X_KEYWORDS = ('football OR soccer OR футбол OR Messi OR Ronaldo OR Mbappe OR Yamal OR Haaland '
+              'OR Barcelona OR "Real Madrid"')
+X_MAX_POSTS = int(_env("X_MAX_POSTS", "100"))       # сколько постов читать за день ($0.005 за каждый)
+X_MIN_LIKES = int(_env("X_MIN_LIKES", "1000"))      # порог лайков для постов больших аккаунтов
+X_VIRAL_LIKES = int(_env("X_VIRAL_LIKES", "5000"))  # порог лайков для постов с любых аккаунтов
+X_PRICE_PER_POST = 0.005
+TRENDS_PER_PLATFORM = 15   # сколько популярных видео с каждой площадки показывать Claude
+
+# Видео из X как фон ролика: 1 — да (если тема совпала с видео), 0 — только стоковые кадры.
+USE_CLIPS = _env("USE_CLIPS", "1").lower() not in ("0", "false", "no", "нет")
+CLIP_VOLUME = float(_env("CLIP_VOLUME", "0.15"))   # звук исходного видео под голосом (0 — без звука)
+CLIP_ZOOM = float(_env("CLIP_ZOOM", "1.35"))       # горизонтальное видео: во сколько раз крупнее, чем «по ширине»
+CLIP_MAX_MB = 80
+
 # ─── Озвучка ──────────────────────────────────────────────────────────────
 # Голоса Microsoft: ru-RU-DmitryNeural (мужской), ru-RU-SvetlanaNeural (женский)
 TTS_VOICE = _env("TTS_VOICE", "ru-RU-DmitryNeural")

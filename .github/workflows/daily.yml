@@ -44,6 +44,13 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_MAX_POSTS: ${{ vars.X_MAX_POSTS }}
+          X_ACCOUNTS: ${{ vars.X_ACCOUNTS }}
+          USE_CLIPS: ${{ vars.USE_CLIPS }}
+          CLIP_VOLUME: ${{ vars.CLIP_VOLUME }}
+          CLIP_ZOOM: ${{ vars.CLIP_ZOOM }}
           VOICE_MODE: ${{ vars.VOICE_MODE }}
           VIDEO_STYLE: ${{ vars.VIDEO_STYLE }}
           SUBTITLES: ${{ vars.SUBTITLES }}

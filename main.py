@@ -25,7 +25,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import config
-from shorts import articles, collector, footage, history, inbox, pending, render, voice
+from shorts import articles, collector, footage, history, inbox, pending, render, trends, voice
 from shorts import editor as editor_mod
 from shorts.telegram import EMOJI, Telegram, announce_chat_ids, script_message, video_caption
 from shorts.textutil import slugify, tg_escape
@@ -125,7 +125,9 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
         for name in list(mix):
             mix[name] = min(mix[name], left)
             left -= mix[name]
-    selections = ed.select(stories, mix, history.recent_titles(hist))
+    popular, popular_report = trends.collect()
+    report.update(popular_report)
+    selections = ed.select(stories, mix, history.recent_titles(hist), trends=popular)
     if not selections:
         raise RuntimeError("Claude не выбрал ни одной темы")
     return selections, report
@@ -135,8 +137,20 @@ def broken_sources(report: dict) -> list[str]:
     return [f"• {tg_escape(f'{k}: {v}'[:150])}" for k, v in report.items() if v.startswith("ошибка")]
 
 
+def popular_summary(report: dict) -> str:
+    """«📈 Популярное за сутки: YouTube — видео: 30; X — постов прочитано: 100 ≈ $0.50»."""
+    parts = [f"{k} — {v}" for k, v in report.items() if k in ("YouTube", "X") and not v.startswith("ошибка")]
+    return "📈 Популярное за сутки: " + "; ".join(parts) if parts else ""
+
+
+def with_popularity(material: str, selection) -> str:
+    note = trends.popularity_note(selection.trends)
+    return f"{material}\n\n{note}" if note else material
+
+
 def _hide_keys(text: str) -> str:
-    for secret in (config.TELEGRAM_BOT_TOKEN, config.ANTHROPIC_API_KEY, config.PEXELS_API_KEY):
+    for secret in (config.TELEGRAM_BOT_TOKEN, config.ANTHROPIC_API_KEY, config.PEXELS_API_KEY,
+                   config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN):
         if secret:
             text = text.replace(secret, "***")
     return text
@@ -257,8 +271,9 @@ def run_scripts(args) -> int:
         scripts = []
         for selection in selections:
             try:
-                material = articles.story_material(selection.item)
+                material = with_popularity(articles.story_material(selection.item), selection)
                 script = ed.write_script(selection, material, today_text, reader="human")
+                script.popular = [t.to_dict() for t in selection.trends]
                 scripts.append((selection, script))
                 log.info("Текст «%s» (%s, %d слов)", script.hook, script.category, script.words)
             except Exception:
@@ -271,6 +286,9 @@ def run_scripts(args) -> int:
             lines = [f"🎙 <b>{tg_escape(config.CHANNEL_NAME)} · темы на {tg_escape(today_text)}: {total}</b>",
                      "Ответьте голосовым на сообщение с текстом — ролик придёт в ответ в течение часа.",
                      "Ответ «бот» — озвучу сам."]
+            popular_line = popular_summary(report)
+            if popular_line:
+                lines += ["", tg_escape(popular_line)]
             broken = broken_sources(report)
             if broken:
                 lines += ["", "Источники с ошибкой:"] + broken
@@ -316,8 +334,9 @@ def run_inbox(args) -> int:
 # ─── полностью автоматический режим (нейроголос) ────────────────────────
 def make_short(ed: editor_mod.Editor, selection, number: int, day_dir: Path, hist: dict,
                date_label: str, today_text: str, seed: int) -> dict:
-    material = articles.story_material(selection.item)
+    material = with_popularity(articles.story_material(selection.item), selection)
     script = ed.write_script(selection, material, today_text, reader="tts")
+    script.popular = [t.to_dict() for t in selection.trends]
     log.info("Сценарий %d: «%s» (%s, %d слов)", number, script.hook, script.category, script.words)
 
     slug = f"{number:02d}_{slugify(script.hook)}"
@@ -325,8 +344,9 @@ def make_short(ed: editor_mod.Editor, selection, number: int, day_dir: Path, his
     work.mkdir(parents=True, exist_ok=True)
     try:
         speech = voice.synthesize(script.text, work / "voice.mp3")
-        bg = footage.get_background(script.footage_queries, script.category, speech.duration + 1.5,
-                                    work, history.used_footage(hist), seed=seed)
+        bg = footage.clip_background(script.popular, work) or footage.get_background(
+            script.footage_queries, script.category, speech.duration + 1.5,
+            work, history.used_footage(hist), seed=seed)
         music = render.pick_music(script.mood)
         out = day_dir / f"{slug}.mp4"
         info = render.render_short(script.category, script.hook, speech, bg, out, date_label, music, seed=seed)
@@ -339,7 +359,8 @@ def make_short(ed: editor_mod.Editor, selection, number: int, day_dir: Path, his
     (day_dir / f"{slug}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     log.info("Готов ролик %s (%.1f с, %.1f МБ)", out.name, info["duration"], out.stat().st_size / 1e6)
     return {"path": out, "script": script, "info": info, "credits": bg.credits,
-            "engine": speech.engine, "footage_ids": bg.footage_ids}
+            "engine": speech.engine, "footage_ids": bg.footage_ids,
+            "clip_url": bg.credits[0] if bg.kind == "clip" and bg.credits else None}
 
 
 def run_auto(args) -> int:
@@ -381,13 +402,17 @@ def run_auto(args) -> int:
                 lines.append(f"{n}. {EMOJI.get(s.category, '⚽')} {tg_escape(s.title)}")
             if failures:
                 lines += ["", "Не получилось:"] + [f"• {tg_escape(f)}" for f in failures]
+            popular_line = popular_summary(report)
+            if popular_line:
+                lines += ["", tg_escape(popular_line)]
             broken = broken_sources(report)
             if broken:
                 lines += ["", "Источники с ошибкой:"] + broken
             lines += ["", f"<i>Claude: {tg_escape(ed.cost_line())}</i>"]
             telegram.send_message("\n".join(lines))
             for n, r in enumerate(results, 1):
-                telegram.send_video(r["path"], video_caption(r["script"], n, r["credits"], r["engine"]),
+                telegram.send_video(r["path"], video_caption(r["script"], n, r["credits"], r["engine"],
+                                                             r.get("clip_url")),
                                     r["info"]["duration"])
         log.info("Готово: %d роликов в %s", len(results), day_dir)
         return 0 if results else 1
