@@ -128,10 +128,19 @@ class Editor:
         if usage is not None:
             self.tokens_in += getattr(usage, "input_tokens", 0) or 0
             self.tokens_out += getattr(usage, "output_tokens", 0) or 0
-        if getattr(response, "stop_reason", None) == "refusal":
+        stop = getattr(response, "stop_reason", None)
+        if stop == "refusal":
             raise RuntimeError("Claude отказался отвечать на этот запрос")
         text = "".join(getattr(block, "text", "") for block in response.content
                        if getattr(block, "type", "") == "text")
+        if stop == "max_tokens" or not text.strip():
+            # не уложился в лимит (например, долго думал над большим списком) — повторяем с запасом
+            if max_tokens < 16000:
+                log.warning("Claude не уложился в %d токенов (stop_reason=%s) — повторяю с запасом",
+                            max_tokens, stop)
+                return self._ask(system, user, schema, max_tokens=min(16000, max_tokens * 3), images=images)
+            kinds = ", ".join(sorted({getattr(b, "type", "?") for b in response.content})) or "пусто"
+            raise RuntimeError(f"Claude не вернул ответ (stop_reason={stop}, блоки: {kinds})")
         return json.loads(text)
 
     def cost_line(self) -> str:
@@ -321,7 +330,7 @@ class Editor:
 Уже выходили:
 {recent}
 
-Верни темы в порядке от самой сильной к слабой. В поле trend — ровно тот id, что в квадратных скобках (например, t3)."""
+Верни ровно {total} тем (не больше) в порядке от самой сильной к слабой. В поле trend — ровно тот id, что в квадратных скобках (например, t3)."""
         schema = {
             "type": "object",
             "properties": {
@@ -351,7 +360,7 @@ class Editor:
         if headlines:
             user += "\n\nЛента новостей за сутки — только для проверки фактов (id · время · источники · заголовок):\n\n"
             user += "\n".join(headlines)
-        data = self._ask(system, user, schema, max_tokens=3000)
+        data = self._ask(system, user, schema, max_tokens=6000)
 
         result: list[Selection] = []
         used: set[str] = set()
