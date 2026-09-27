@@ -1,4 +1,55 @@
 {
- "items": [],
+ "items": [
+  {
+   "id": "20260927-1",
+   "date": "2026-09-27",
+   "created": "2026-09-27T03:15+03:00",
+   "number": 1,
+   "message_id": 17,
+   "status": "waiting",
+   "script": {
+    "category": "главное",
+    "hook": "Испания обыграла Англию",
+    "text": "Испания в гостях уделала Англию три-два и обновила свою беспроигрышную серию. Судьи, конечно, подкинули пенальти, будто испанцам мало было своего футбола. А Кейн опять смотрел на ворота издалека, вместо того чтобы туда стрелять. Де ла Фуэнте доволен, Ямаль сияет после своего гола, а англичане снова считают, что их обокрали. Привычная картина, ничего нового.",
+    "title": "англия в своём репертуаре",
+    "description": "Испания разгромила Англию на выезде и продолжает свою бессменную победную серию, а спорный пенальти и промахи Кейна снова дали повод для споров. Источник: Спорт-Экспресс, Чемпионат.",
+    "hashtags": [
+     "#футбол",
+     "#испания",
+     "#англия",
+     "#лиганаций",
+     "#кейн",
+     "#ямаль"
+    ],
+    "footage_queries": [
+     "football stadium crowd from stands",
+     "soccer match stadium night",
+     "football fans cheering stands"
+    ],
+    "mood": "энергично",
+    "sources": [
+     [
+      "Спорт-Экспресс",
+      "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-schet-i-rezultat-matcha-ligi-naciy-26-sentyabrya-2026-2458076/"
+     ],
+     [
+      "Чемпионат",
+      "https://www.championat.com/football/news-6634920-de-la-fuente-prokommentiroval-pobedu-ispanii-nad-angliej-v-matche-ligi-nacij.html"
+     ],
+     [
+      "Чемпионат",
+      "https://www.championat.com/football/news-6634938-yamal-vyskazalsya-o-pobede-ispanii-nad-angliej-v-matche-lige-nacij-i-o-svoyom-zabitom-myache.html"
+     ]
+    ],
+    "context": "Испания на выезде обыграла Англию со счётом 3:2 в стартовом туре Лиги наций, продлив свою беспроигрышную серию. Матч запомнился спорным пенальти и неудачной игрой Гарри Кейна, а после встречи высказались Ямаль и де ла Фуэнте."
+   },
+   "links": [
+    "https://www.sport-express.ru/football/nation-league/news/angliya-ispaniya-schet-i-rezultat-matcha-ligi-naciy-26-sentyabrya-2026-2458076/",
+    "https://www.championat.com/football/news-6634920-de-la-fuente-prokommentiroval-pobedu-ispanii-nad-angliej-v-matche-ligi-nacij.html",
+    "https://www.championat.com/football/news-6634938-yamal-vyskazalsya-o-pobede-ispanii-nad-angliej-v-matche-lige-nacij-i-o-svoyom-zabitom-myache.html"
+   ],
+   "videos": []
+  }
+ ],
  "last_update_id": 0
 }
