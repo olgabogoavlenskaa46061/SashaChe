@@ -128,14 +128,15 @@ YOUTUBE_API_KEY = _env("YOUTUBE_API_KEY")   # бесплатно: console.cloud.
 X_BEARER_TOKEN = _env("X_BEARER_TOKEN")     # платно: console.x.com, $0.005 за пост
 
 # Запросы к YouTube: (что искать, страна, язык).
-YOUTUBE_QUERIES = [("футбол", "RU", "ru"), ("football", "GB", "en"), ("soccer", "US", "en")]
+YOUTUBE_QUERIES = [("футбол", "RU", "ru"), ("fútbol", "ES", "es"), ("fútbol", "MX", "es"),
+                   ("football", "GB", "en"), ("soccer", "US", "en")]
 YOUTUBE_PER_QUERY = 25
 
 # X: большие футбольные аккаунты с видео и слова для поиска вирусных видео с любых аккаунтов.
-X_ACCOUNTS = _env("X_ACCOUNTS", "433,brfootball,goal,ESPNFC,SkySportsPL,OneFootball,TrollFootball,"
-                                "sportbible,FCBarcelona,realmadrid")
-X_KEYWORDS = ('football OR soccer OR футбол OR Messi OR Ronaldo OR Mbappe OR Yamal OR Haaland '
-              'OR Barcelona OR "Real Madrid"')
+X_ACCOUNTS = _env("X_ACCOUNTS", "433,brfootball,goal,ESPNFC,OneFootball,TrollFootball,sportbible,"
+                                "FCBarcelona,realmadrid,marca,diarioas,SC_ESPN,LaLiga")
+X_KEYWORDS = ('football OR soccer OR fútbol OR golazo OR футбол OR Messi OR Ronaldo OR Mbappe OR Yamal '
+              'OR Vinicius OR Haaland OR Barcelona OR "Real Madrid"')
 X_MAX_POSTS = int(_env("X_MAX_POSTS", "100"))       # сколько постов читать за день ($0.005 за каждый)
 X_MIN_LIKES = int(_env("X_MIN_LIKES", "1000"))      # порог лайков для постов больших аккаунтов
 X_VIRAL_LIKES = int(_env("X_VIRAL_LIKES", "5000"))  # порог лайков для постов с любых аккаунтов
@@ -145,8 +146,9 @@ X_PRICE_PER_POST = 0.005
 # $2.60 за 1000 рилсов; на бесплатном тарифе Apify даёт $5 в месяц — около 60 рилсов в день.
 APIFY_TOKEN = _env("APIFY_TOKEN")           # apify.com → Settings → API & Integrations
 INSTAGRAM_ACCOUNTS = _env("INSTAGRAM_ACCOUNTS", "433,brfootball,goal,espnfc,onefootball,sportbible,"
-                                                "fcbarcelona,realmadrid,championsleague,premierleague")
-INSTAGRAM_PER_ACCOUNT = int(_env("INSTAGRAM_PER_ACCOUNT", "6"))   # сколько последних рилсов с аккаунта
+                                                "fcbarcelona,realmadrid,championsleague,premierleague,"
+                                                "marca,diarioas,mundodeportivo,laliga")
+INSTAGRAM_PER_ACCOUNT = int(_env("INSTAGRAM_PER_ACCOUNT", "4"))   # сколько последних рилсов с аккаунта
 INSTAGRAM_MAX_REELS = int(_env("INSTAGRAM_MAX_REELS", "60"))       # потолок рилсов за день (защита от расходов)
 INSTAGRAM_ACTOR = "apify~instagram-reel-scraper"
 INSTAGRAM_PRICE_PER_REEL = 0.0026
