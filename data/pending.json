@@ -51,6 +51,160 @@
    "videos": [
     "01_ispaniya-obygrala-angliyu.mp4"
    ]
+  },
+  {
+   "id": "20260927-1",
+   "date": "2026-09-27",
+   "created": "2026-09-27T04:01+03:00",
+   "number": 1,
+   "message_id": 23,
+   "status": "waiting",
+   "script": {
+    "category": "главное",
+    "hook": "рекорд испании",
+    "text": "Испания вынесла Англию 3:2 и заодно установила мировой рекорд без поражений. Ямаль опять решает исход, пока англичане в очередной раз изобретают повод для расстройства. Рекорд, конечно, красивый, но главное — привычка. У испанцев она уже мировая, у англичан — только домашняя, в стиле «опять недокрутили». Так что поздравляем чемпионов постоянства, а остальным остаётся считать чужие матчи без поражений.",
+    "title": "гении постоянства",
+    "description": "Испания обыграла Англию 3:2 и обновила мировой рекорд по числу официальных матчей без поражений. Источник: Чемпионат.",
+    "hashtags": [
+     "#футбол",
+     "#испания",
+     "#англия",
+     "#ямаль",
+     "#рекорд"
+    ],
+    "footage_queries": [
+     "football stadium crowd from stands",
+     "soccer match stadium night",
+     "football fans cheering stands"
+    ],
+    "mood": "энергично",
+    "sources": [
+     [
+      "Чемпионат",
+      "https://www.championat.com/football/news-6634964-sbornaya-ispanii-obnovila-mirovoj-rekord-po-chislu-oficialnyh-matchej-podryad-bez-porazhenij.html"
+     ]
+    ],
+    "context": "Сборная Испании обыграла Англию со счётом 3:2 и установила новый мировой рекорд по числу официальных матчей подряд без поражений.",
+    "popular": [
+     {
+      "id": "t14",
+      "platform": "X",
+      "title": "Lamine Yamal vs England — CHOOSE ONE. @ballondor",
+      "url": "https://x.com/i/web/status/2103948363402002775",
+      "views": 486755,
+      "likes": 16868,
+      "author": "",
+      "published": "2026-09-26T20:42:33.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103947746113634304/vid/avc1/1280x720/KAMxLbPbP-NXM8XO.mp4",
+      "duration": 209.7
+     },
+     {
+      "id": "t16",
+      "platform": "X",
+      "title": "Lamine Yamal is INSANE. 🪄🇪🇸",
+      "url": "https://x.com/i/web/status/2103928763553853726",
+      "views": 451653,
+      "likes": 9375,
+      "author": "",
+      "published": "2026-09-26T19:24:40.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103928678132367360/vid/avc1/1280x720/i_0qbXuFxRe5kPDz.mp4?tag=14",
+      "duration": 13.4
+     },
+     {
+      "id": "t20",
+      "platform": "X",
+      "title": "Lamine Yamal vs England",
+      "url": "https://x.com/i/web/status/2103948665341805036",
+      "views": 376996,
+      "likes": 13646,
+      "author": "",
+      "published": "2026-09-26T20:43:45.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103948385552314368/vid/avc1/1280x720/Li9OTy5JHPc9fNev.mp4",
+      "duration": 157.3
+     },
+     {
+      "id": "t22",
+      "platform": "X",
+      "title": "⚽️👑 LAMINE YAMAL 🇪🇸 OUVRE LA MARQUE APRÈS MÊME PAS 2 MINUTES DE JEU FACE À L’ANGLETERRE 🏴󠁧󠁢󠁥󠁮󠁧󠁿 !!!!! EN MISSION 🤩 🎥 @lequipe",
+      "url": "https://x.com/i/web/status/2103921403066019937",
+      "views": 375565,
+      "likes": 8701,
+      "author": "",
+      "published": "2026-09-26T18:55:26.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103921181673816065/vid/avc1/1280x720/Y6Xnoox72YPNX44x.mp4?tag=16",
+      "duration": 88.2
+     },
+     {
+      "id": "t26",
+      "platform": "X",
+      "title": "Ferran Torres missed 2 clear chances; - 1 miss from Rodri’s through ball - 1 miss from Lamine Yamal’s through ball Thank God FC Barcelona disposed him",
+      "url": "https://x.com/i/web/status/2103928702924886178",
+      "views": 362384,
+      "likes": 8358,
+      "author": "",
+      "published": "2026-09-26T19:24:26.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103928119740583936/vid/avc1/720x720/dAmAmDzuUVhG5jIT.mp4",
+      "duration": 18.9
+     },
+     {
+      "id": "t30",
+      "platform": "X",
+      "title": "Declan Rice vs Pedri. Who makes it into your England x Spain combined XI midfield? ⚪️🔴 #SaturdaySocial",
+      "url": "https://x.com/i/web/status/2103769018226090223",
+      "views": 330732,
+      "likes": 1477,
+      "author": "",
+      "published": "2026-09-26T08:49:54.000Z",
+      "video_url": "https://video.twimg.com/amplify_video/2103768814169038849/vid/avc1/1280x720/ryDBvoolVnHEXwUD.mp4?tag=16",
+      "duration": 137.6
+     }
+    ]
+   },
+   "links": [
+    "https://www.championat.com/football/news-6634964-sbornaya-ispanii-obnovila-mirovoj-rekord-po-chislu-oficialnyh-matchej-podryad-bez-porazhenij.html"
+   ],
+   "videos": []
+  },
+  {
+   "id": "20260927-2",
+   "date": "2026-09-27",
+   "created": "2026-09-27T04:01+03:00",
+   "number": 2,
+   "message_id": 24,
+   "status": "waiting",
+   "script": {
+    "category": "курьёз",
+    "hook": "справка Эмболо",
+    "text": "Швейцарцы, оказывается, чемпионы не только по часам, но и по справкам. Эмболо сам признался, что документ о вакцинации у него, скажем так, творческий. Отстранили сразу, без разговоров. И ладно бы один, до него точно так же спалился Джака. Похоже, в раздевалке сборной завёлся целый цех по производству бумажек. Правда, на поле этот талант почему-то не конвертируется.",
+    "title": "справочное бюро",
+    "description": "Форвард сборной Швейцарии Брель Эмболо признался в подделке справки о вакцинации и был отстранён от команды перед игрой с Северной Македонией. Источник: Спорт-Экспресс.",
+    "hashtags": [
+     "#футбол",
+     "#швейцария",
+     "#эмболо",
+     "#джака",
+     "#лиганаций",
+     "#атланта"
+    ],
+    "footage_queries": [
+     "football stadium crowd from stands",
+     "soccer national team players walking tunnel",
+     "football fans cheering stands night"
+    ],
+    "mood": "весело",
+    "sources": [
+     [
+      "Спорт-Экспресс",
+      "https://www.sport-express.ru/football/nation-league/news/napadayuschego-embolo-otstranili-ot-sbornoy-shveycarii-iz-za-poddelki-spravki-o-vakcinacii-2457882/"
+     ]
+    ],
+    "context": "Нападающий «Атланты» Брель Эмболо признался, что подделал справку о вакцинации от COVID-19, и был отстранён от сборной Швейцарии перед матчем с Северной Македонией. Ранее по такой же причине из команды убрали Джаку.",
+    "popular": []
+   },
+   "links": [
+    "https://www.sport-express.ru/football/nation-league/news/napadayuschego-embolo-otstranili-ot-sbornoy-shveycarii-iz-za-poddelki-spravki-o-vakcinacii-2457882/"
+   ],
+   "videos": []
   }
  ],
  "last_update_id": 356227875
