@@ -6,7 +6,7 @@
    "created": "2026-09-27T03:15+03:00",
    "number": 1,
    "message_id": 17,
-   "status": "waiting",
+   "status": "done",
    "script": {
     "category": "главное",
     "hook": "Испания обыграла Англию",
@@ -48,8 +48,10 @@
     "https://www.championat.com/football/news-6634920-de-la-fuente-prokommentiroval-pobedu-ispanii-nad-angliej-v-matche-ligi-nacij.html",
     "https://www.championat.com/football/news-6634938-yamal-vyskazalsya-o-pobede-ispanii-nad-angliej-v-matche-lige-nacij-i-o-svoyom-zabitom-myache.html"
    ],
-   "videos": []
+   "videos": [
+    "01_ispaniya-obygrala-angliyu.mp4"
+   ]
   }
  ],
- "last_update_id": 0
+ "last_update_id": 356227875
 }
