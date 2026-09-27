@@ -143,7 +143,7 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
     if config.TOPIC_SOURCE == "viral":
         fresh = [t for t in popular if t.url not in used]
         if fresh:
-            selections = ed.select_viral(fresh, stories, mix, recent)
+            selections = viral_topics(ed, fresh, stories, mix, recent, used)
             if selections:
                 return selections, report
             report["Темы"] = "ошибка: среди популярных видео подходящих моментов не нашлось — темы из новостей"
@@ -163,6 +163,33 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
     if not selections:
         raise RuntimeError("Claude не выбрал ни одной темы")
     return selections, report
+
+
+def viral_topics(ed: editor_mod.Editor, fresh: list, stories: list, mix: dict[str, int],
+                 recent: list[str], used: set[str]) -> list:
+    """Темы из популярных видео. Если к моменту подходят новости, которые уже были в роликах, —
+    это тот же матч или событие: такую тему отбрасываем и один раз добираем замену."""
+    wanted = sum(mix.values())
+    chosen: list = []
+    candidates = list(fresh)
+    left = dict(mix)
+    for _ in range(2):
+        picked = ed.select_viral(candidates, stories, left, recent, used_links=used)
+        taken = {t.url for sel in picked for t in sel.trends}
+        for sel in picked:
+            if any(n.link in used for n in sel.item.related):
+                log.info("Пропускаю «%s»: этот матч или событие уже было в роликах", sel.item.title[:80])
+                continue
+            chosen.append(sel)
+            if left.get(sel.category, 0) > 0:
+                left[sel.category] -= 1
+            else:  # тема другой категории — снимаем с самой большой
+                biggest = max(left, key=left.get)
+                left[biggest] = max(0, left[biggest] - 1)
+        candidates = [t for t in candidates if t.url not in taken]
+        if len(chosen) >= wanted or not candidates or sum(left.values()) <= 0:
+            break
+    return chosen[:wanted]
 
 
 def material_for(selection) -> tuple[str, list[bytes] | None]:
