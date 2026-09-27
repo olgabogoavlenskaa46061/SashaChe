@@ -1,6 +1,7 @@
 """Редакция: Claude выбирает темы дня и пишет сценарии роликов."""
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from dataclasses import dataclass, field
@@ -15,6 +16,24 @@ log = logging.getLogger(__name__)
 def _count(n: int) -> str:
     from .trends import human_count
     return human_count(n)
+
+
+def _stats(trend) -> str:
+    from .trends import stats_line
+    return stats_line(trend) or "просмотры неизвестны"
+
+
+def _video_item(trend, related: list[NewsItem]) -> NewsItem:
+    """Популярное видео в виде «сюжета»: заголовок — текст поста, источник — площадка,
+    related — новости про этот момент (для фактов и ссылок)."""
+    published = datetime.now(ZoneInfo("UTC"))
+    if trend.published:
+        try:
+            published = datetime.fromisoformat(trend.published.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    return NewsItem(id=f"video:{trend.url}", title=trend.title, summary=trend.description, link=trend.url,
+                    source=trend.platform, lang="", published=published, related=list(related))
 
 
 # Цены за 1 млн токенов (вход, выход) — только для примерной оценки в логе.
@@ -76,12 +95,18 @@ class Editor:
         self.client.models.list(limit=1)
 
     # ── общий вызов ──────────────────────────────────────────────────────
-    def _ask(self, system: str, user: str, schema: dict, max_tokens: int = 3000) -> dict:
+    def _ask(self, system: str, user: str, schema: dict, max_tokens: int = 3000,
+             images: list[bytes] | None = None) -> dict:
+        content: str | list = user
+        if images:  # кадры из видео — Claude видит, что происходит в моменте
+            content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                    "data": base64.b64encode(img).decode("ascii")}}
+                       for img in images] + [{"type": "text", "text": user}]
         response = self.client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
             system=system,
-            messages=[{"role": "user", "content": user}],
+            messages=[{"role": "user", "content": content}],
             output_config={"format": {"type": "json_schema", "schema": schema}},
         )
         usage = getattr(response, "usage", None)
@@ -226,6 +251,116 @@ class Editor:
                  sum(1 for r in result if r.trends))
         return result
 
+    # ── 1б. Выбор тем из популярных видео (YouTube и X) ──────────────────
+    def select_viral(self, trends: list, news: list[NewsItem], mix: dict[str, int],
+                     recent_titles: list[str], max_news: int = 250) -> list[Selection]:
+        """Темы — самые популярные футбольные моменты за сутки. Новости — только чтобы сверить факты."""
+        tz = ZoneInfo(config.TIMEZONE)
+        trend_by_id = {t.id: t for t in trends}
+        news_by_id = {n.id: n for n in news[:max_news]}
+        wanted = "\n".join(f"- {count} × «{name}»" for name, count in mix.items() if count > 0)
+        total = sum(mix.values())
+        recent = "\n".join(f"- {t}" for t in recent_titles[-40:]) or "- (пока ничего)"
+
+        videos = []
+        for t in trends:
+            when = ""
+            if t.published:
+                try:
+                    when = datetime.fromisoformat(t.published.replace("Z", "+00:00")).astimezone(tz).strftime("%d.%m %H:%M")
+                except ValueError:
+                    pass
+            extra = " · видео можно взять в ролик" if t.video_url else ""
+            length = f" · {round(t.duration)} с" if t.duration else ""
+            author = f" · {t.author}" if t.author else ""
+            descr = f" — {t.description[:150]}" if t.description else ""
+            videos.append(f"[{t.id}] {t.platform}{author} · {_stats(t)}{length}{extra} · {when} · «{t.title}»{descr}")
+        headlines = [f"[{n.id}] {n.published.astimezone(tz):%d.%m %H:%M} · {', '.join(n.sources)} · {n.title}"
+                     for n in news[:max_news]]
+
+        system = f"""Ты — шеф-редактор футбольного канала «{config.CHANNEL_NAME}» с короткими вертикальными видео. Автор — Саша, болельщик, который комментирует футбол своим голосом и с иронией. Аудитория больше всего любит «Барселону» и «Реал», Месси и Роналду, Мбаппе, Ямаля, топ-клубы АПЛ и матчи сборных.
+
+Каждый день ты выбираешь темы из самых популярных футбольных видео за сутки в X, Instagram и на YouTube: что люди смотрят и лайкают больше всего. Сегодня нужно {total} тем:
+{wanted}
+
+Что значат категории:
+- «главное» — громкий момент дня: гол-шедевр, ошибка, решение судьи, скандал, выходка звезды.
+- «курьёз» — смешное и нелепое: промахи, падения, странные ситуации, троллинг, выходки болельщиков.
+- «интересное» — то, что удивляет: невероятная техника, рекорд, трогательный момент, редкость.
+
+Как выбирать:
+- Тема — один конкретный момент из видео, о котором Саша расскажет за 20 секунд. Чем больше просмотров и лайков, тем лучше, но важнее, чтобы момент был ярким и понятным.
+- Только футбол. Не бери хайлайты целых матчей, обзоры туров, подборки «топ-10», подкасты, стримы, рекламу, ставки и медиафутбол.
+- Не бери смерти, тяжёлые травмы, насилие, войну и политику.
+- Если один и тот же момент есть на нескольких площадках, главным укажи видео с пометкой «видео можно взять в ролик» (из X или Instagram), остальные — в поле also.
+- Каждая тема — отдельный момент. Разные видео про один и тот же эпизод — одна тема.
+- Не повторяй то, что уже выходило (список ниже), в том числе под другим углом.
+- Если в какой-то категории нет достойного момента, возьми сильный момент другой категории и укажи его настоящую категорию.
+
+Факты:
+- Ниже ещё лента новостей за сутки. Темой новость быть не может — она нужна только чтобы сверить факты. В поле news укажи id новостей про этот же момент или матч (счёт, кто забил, что случилось). Если таких нет — пустой список.
+
+Уже выходили:
+{recent}
+
+Верни темы в порядке от самой сильной к слабой. В поле trend — ровно тот id, что в квадратных скобках (например, t3)."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "stories": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "trend": {"type": "string", "description": "id главного видео (t1, t2…)"},
+                            "also": {"type": "array", "items": {"type": "string"},
+                                     "description": "id других видео про этот же момент"},
+                            "news": {"type": "array", "items": {"type": "string"},
+                                     "description": "id новостей про этот момент — для проверки фактов"},
+                            "category": {"type": "string", "enum": list(config.CATEGORIES)},
+                            "why": {"type": "string", "description": "одна фраза: чем зацепит зрителя"},
+                        },
+                        "required": ["trend", "also", "news", "category", "why"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["stories"],
+            "additionalProperties": False,
+        }
+        user = ("Популярные футбольные видео за сутки (id · площадка · автор · просмотры · лайки · длина · "
+                "время по Москве · текст поста или название — описание):\n\n" + "\n".join(videos))
+        if headlines:
+            user += "\n\nЛента новостей за сутки — только для проверки фактов (id · время · источники · заголовок):\n\n"
+            user += "\n".join(headlines)
+        data = self._ask(system, user, schema, max_tokens=3000)
+
+        result: list[Selection] = []
+        used: set[str] = set()
+        for row in data.get("stories", []):
+            main = trend_by_id.get(str(row.get("trend", "")).strip("[] "))
+            if main is None or main.id in used:
+                continue
+            others = []
+            for trend_id in row.get("also") or []:
+                other = trend_by_id.get(str(trend_id).strip("[] "))
+                if other is not None and other is not main and other not in others and other.id not in used:
+                    others.append(other)
+            related = []
+            for news_id in row.get("news") or []:
+                item = news_by_id.get(str(news_id).strip("[] "))
+                if item is not None and item not in related:
+                    related.append(item)
+            category = row.get("category") if row.get("category") in config.CATEGORIES else "главное"
+            result.append(Selection(item=_video_item(main, related), category=category,
+                                    why=row.get("why", ""), trends=[main] + others))
+            used.update(t.id for t in [main] + others)
+            if len(result) >= total:
+                break
+        log.info("Выбрано моментов из популярных видео: %d из %d (с новостями для фактов: %d)", len(result),
+                 total, sum(1 for r in result if r.item.related))
+        return result
+
     # ── 2. Сценарий ──────────────────────────────────────────────────────
     def _sasha_prompt(self, category: str, reader: str) -> str:
         tone = {
@@ -242,7 +377,7 @@ class Editor:
             reader_line = "Текст прочитает синтезатор речи."
             reader_rules = ("- Текст читает синтезатор: числа, счёт и даты пиши словами («два — один», «сто четырнадцать»), "
                             "без сокращений («Лига чемпионов», а не «ЛЧ»), без эмодзи, хештегов и скобок.")
-        return f"""Ты пишешь тексты для коротких видео футбольного канала «{config.CHANNEL_NAME}». Автор — Саша, болельщик, который ездит на матчи и комментирует футбол с иронией. {reader_line} Поверх пойдут кадры со стадиона без надписей, в конце — замедленный повтор.
+        return f"""Ты пишешь тексты для коротких видео футбольного канала «{config.CHANNEL_NAME}». Автор — Саша, болельщик, который ездит на матчи и комментирует футбол с иронией. {reader_line} Поверх пойдёт видео этого момента или кадры со стадиона, без надписей, в конце — замедленный повтор.
 
 Как звучит Саша:
 - Живая разговорная речь, как будто рассказываешь другу на трибуне. Можно «ну», «вот», «а какие варианты», но без перебора.
@@ -254,6 +389,7 @@ class Editor:
 
 Факты:
 - Только из присланных материалов. Ничего не выдумывай: ни цифр, ни цитат, ни деталей, ни причин. Слухи подавай как слухи («пишут, что…», «по данным…»).
+- Если тема — популярное видео из X или с YouTube, текст поста — это подпись автора, а не проверенный факт: счёт, имена и детали сверяй с новостями из материалов. Если новостей нет — говори только о том, что есть в подписи и видно на кадрах, без лишних подробностей.
 - Своими словами, не копируй фразы из статей.
 - Имена, клубы и турниры — как принято в русских спортивных СМИ, иностранные издания — по-русски («Экип», «Би-би-си»).
 {reader_rules}
@@ -262,7 +398,7 @@ class Editor:
 - context — 1–2 нейтральных предложения о том, что случилось, чтобы Саша понимал, о чём читает.
 - hook — тема в 2–5 словах (для подписи и имени файла), без точки.
 - title — название ролика в стиле канала: 1–3 слова с иронией, с маленькой буквы, без эмодзи и точки (например: «ни стыда», «сам виноват», «лучше переплатить», «гении», «что-то не так»).
-- description — 1–2 предложения под видео, в конце «Источник: …» с названиями изданий.
+- description — 1–2 предложения под видео, в конце «Источник: …» с названиями изданий (для видео из X или YouTube — площадка).
 - hashtags — 4–6 хештегов без пробелов, строчными: первым #футбол, дальше клубы, игроки и турнир (например: #барселона #лалига #реалмадрид #мбаппе).
 - footage_queries — 3 коротких запроса НА АНГЛИЙСКОМ для стоковых видео, как будто снято болельщиком с трибуны: стадион, трибуны, фанаты, игроки на поле издалека (например: "football stadium crowd from stands", "soccer match stadium night", "football fans cheering stands"). Без имён людей, клубов и брендов.
 - mood — настроение (пригодится, если добавите музыку)."""
@@ -295,7 +431,8 @@ class Editor:
 - footage_queries — 3 коротких запроса НА АНГЛИЙСКОМ для поиска бесплатных стоковых видео под настроение сюжета (например: "soccer stadium night crowd", "barber shop haircut", "football on grass slow motion"). Без имён людей, клубов и брендов.
 - mood — настроение музыки."""
 
-    def write_script(self, selection: Selection, material: str, today: str, reader: str | None = None) -> Script:
+    def write_script(self, selection: Selection, material: str, today: str, reader: str | None = None,
+                     images: list[bytes] | None = None) -> Script:
         """reader: human — текст читает Саша; tts — синтезатор речи."""
         reader = reader or ("human" if config.VOICE_MODE == "human" else "tts")
         if config.VIDEO_STYLE == "sasha":
@@ -325,7 +462,11 @@ class Editor:
             "required": ["context", "hook", "script", "title", "description", "hashtags", "footage_queries", "mood"],
             "additionalProperties": False,
         }
-        data = self._ask(system, user, schema, max_tokens=2000)
+        if images:
+            user += ("\n\nПриложены кадры из видео по порядку. По ним видно, что происходит в моменте, — "
+                     "опиши это своими словами. Людей по кадрам не узнавай: имена, счёт, минуты и цифры "
+                     "бери только из текста материалов.")
+        data = self._ask(system, user, schema, max_tokens=2000, images=images)
 
         # Слишком длинный текст — просим сократить один раз.
         if len(data["script"].split()) > config.SCRIPT_MAX_WORDS * 1.3:

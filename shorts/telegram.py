@@ -202,8 +202,10 @@ def script_message(script, number: int, total: int) -> str:
     popular = popular_line(script.popular)
     if popular:
         parts.append(popular)
-        if config.USE_CLIPS and any(p.get("video_url") for p in script.popular):
-            parts.append("🎬 Фоном ролика будет видео из X про этот момент.")
+        clips = [p for p in script.popular if p.get("video_url")]
+        if config.USE_CLIPS and clips:
+            best = max(clips, key=lambda p: (p.get("views") or 0, p.get("likes") or 0))
+            parts.append(f"🎬 Фоном ролика будет видео из {tg_escape(best.get('platform') or 'X')} про этот момент.")
     parts += [
         "",
         "↩️ Ответьте на это сообщение голосовым — соберу ролик. "

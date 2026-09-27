@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import math
 import random
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,6 +20,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFilter
 
 import config
+from .trends import youtube_id
 from .voice import probe_duration
 
 log = logging.getLogger(__name__)
@@ -271,7 +273,40 @@ def clip_background(popular: list[dict], workdir: Path) -> Background | None:
             path.unlink(missing_ok=True)
             path.with_suffix(".part").unlink(missing_ok=True)
             continue
-        post_id = str(post.get("url", "")).rstrip("/").rsplit("/", 1)[-1]
-        log.info("Фон — видео из X: %s", post.get("url"))
-        return Background("clip", [path], [post.get("url", "")], [f"x:{post_id}"])
+        url = str(post.get("url", ""))
+        prefix = "ig" if "instagram.com" in url else "x"
+        log.info("Фон — видео из %s: %s", post.get("platform") or "X", url)
+        return Background("clip", [path], [url], [f"{prefix}:{url.rstrip('/').rsplit('/', 1)[-1]}"])
     return None
+
+
+def preview_images(trends: list, workdir: Path, count: int = 4, width: int = 640) -> list[bytes]:
+    """Кадры, чтобы Claude видел сам момент: из видео X/Instagram — 4 кадра, с YouTube — обложка."""
+    for trend in trends:
+        if not getattr(trend, "video_url", ""):
+            continue
+        try:
+            path = _download_limited(trend.video_url, workdir / "preview.mp4", config.CLIP_MAX_MB)
+            duration = probe_duration(path)
+            frames = []
+            for k in range(count):
+                moment = duration * (0.08 + 0.84 * k / max(1, count - 1))
+                out = workdir / f"frame_{k}.jpg"
+                subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{moment:.2f}", "-i", str(path),
+                                "-frames:v", "1", "-vf", f"scale={width}:-2", "-q:v", "4", str(out)],
+                               check=True, capture_output=True, timeout=60)
+                frames.append(out.read_bytes())
+            return frames
+        except Exception as error:
+            log.warning("Кадры из видео не получились (%s): %s", getattr(trend, "url", ""), error)
+    for trend in trends:
+        video_id = youtube_id(trend.url) if trend.platform == "YouTube" else ""
+        if not video_id:
+            continue
+        try:
+            response = requests.get(f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg", timeout=20)
+            response.raise_for_status()
+            return [response.content]
+        except Exception as error:
+            log.warning("Обложка YouTube не скачалась (%s): %s", trend.url, error)
+    return []

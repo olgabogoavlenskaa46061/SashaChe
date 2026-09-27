@@ -46,6 +46,9 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          INSTAGRAM_ACCOUNTS: ${{ vars.INSTAGRAM_ACCOUNTS }}
+          TOPIC_SOURCE: ${{ vars.TOPIC_SOURCE }}
           X_MAX_POSTS: ${{ vars.X_MAX_POSTS }}
           X_ACCOUNTS: ${{ vars.X_ACCOUNTS }}
           USE_CLIPS: ${{ vars.USE_CLIPS }}

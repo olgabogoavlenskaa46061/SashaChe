@@ -52,3 +52,28 @@ def story_material(lead: NewsItem, max_sources: int = 3) -> str:
             f"Текст: {body[:3500]}"
         )
     return "\n\n---\n\n".join(parts)
+
+
+def viral_material(selection, max_news: int = 2) -> str:
+    """Материалы для темы из популярного видео: подписи к видео и новости про этот момент (для фактов)."""
+    from .trends import stats_line
+    parts = []
+    for number, trend in enumerate(selection.trends):
+        head = "Видео, о котором ролик" if number == 0 else "Этот же момент на другой площадке"
+        stats = stats_line(trend)
+        lines = [f"{head}: {trend.platform}" + (f", автор {trend.author}" if trend.author else "")
+                 + (f" · {stats}" if stats else "")]
+        lines.append(f"{'Название' if trend.platform == 'YouTube' else 'Подпись автора'}: {trend.title}")
+        if trend.description:
+            lines.append(f"Описание: {trend.description}")
+        if trend.published:
+            lines.append(f"Опубликовано: {trend.published}")
+        parts.append("\n".join(lines))
+    news = selection.item.related[:max_news]
+    for item in news:
+        body = item.text or fetch_text(item.link) or item.summary
+        parts.append(f"Новость про этот момент (для проверки фактов)\nИсточник: {item.source}\n"
+                     f"Заголовок: {item.title}\nТекст: {body[:3000]}")
+    if not news:
+        parts.append("Новостей про этот момент нет: факты — только из подписи и того, что видно на кадрах.")
+    return "\n\n---\n\n".join(parts)

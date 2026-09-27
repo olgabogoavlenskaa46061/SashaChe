@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 YT_SEARCH = "https://www.googleapis.com/youtube/v3/search"
 YT_VIDEOS = "https://www.googleapis.com/youtube/v3/videos"
 X_SEARCH = "https://api.x.com/2/tweets/search/recent"
+APIFY_RUN = "https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
 _T_CO = re.compile(r"https?://t\.co/\S+")
 
 
@@ -41,6 +42,7 @@ class Trend:
     published: str = ""     # ISO-время публикации
     video_url: str = ""     # прямая ссылка на mp4 (только X)
     duration: float = 0.0   # секунды
+    description: str = ""   # описание видео (YouTube)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -99,7 +101,7 @@ def youtube_popular(hours: int = 24) -> list[Trend]:
         data = _get_json(YT_SEARCH, {
             "part": "snippet", "type": "video", "order": "viewCount", "publishedAfter": since,
             "maxResults": config.YOUTUBE_PER_QUERY, "q": query, "regionCode": region,
-            "relevanceLanguage": language}, headers)
+            "relevanceLanguage": language, "videoDuration": "short"}, headers)
         for item in data.get("items", []):
             video_id = (item.get("id") or {}).get("videoId")
             snippet = item.get("snippet") or {}
@@ -124,7 +126,8 @@ def youtube_popular(hours: int = 24) -> list[Trend]:
             url=f"https://www.youtube.com/watch?v={video_id}",
             views=int(st.get("viewCount") or 0), likes=int(st.get("likeCount") or 0),
             author=one_line(html.unescape(snippet.get("channelTitle", ""))),
-            published=snippet.get("publishedAt", "")))
+            published=snippet.get("publishedAt", ""),
+            description=one_line(html.unescape(snippet.get("description", "")))[:500]))
     trends.sort(key=lambda t: (t.views, t.likes), reverse=True)
     return trends
 
@@ -205,19 +208,58 @@ def x_popular(hours: int = 24) -> tuple[list[Trend], int]:
     return result, read
 
 
+# ─── Instagram (через Apify) ─────────────────────────────────────────────
+def instagram_popular(hours: int = 24) -> tuple[list[Trend], int]:
+    """Рилсы больших футбольных аккаунтов за сутки. Возвращает видео и число полученных рилсов."""
+    accounts = [a.strip().lstrip("@") for a in config.INSTAGRAM_ACCOUNTS.split(",") if a.strip()]
+    if not accounts:
+        return [], 0
+    days = max(1, round(hours / 24))
+    body = {"username": accounts, "resultsLimit": config.INSTAGRAM_PER_ACCOUNT,
+            "onlyPostsNewerThan": f"{days} day" if days == 1 else f"{days} days", "skipPinnedPosts": True}
+    response = requests.post(APIFY_RUN.format(actor=config.INSTAGRAM_ACTOR), json=body, timeout=330,
+                             params={"maxItems": config.INSTAGRAM_MAX_REELS},
+                             headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if response.status_code >= 400:
+        error = (data or {}).get("error") if isinstance(data, dict) else None
+        message = (error or {}).get("message") if isinstance(error, dict) else None
+        raise RuntimeError(f"HTTP {response.status_code}: {one_line(message or response.text[:200])[:200]}")
+    items = data if isinstance(data, list) else []
+    trends: dict[str, Trend] = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        url = item.get("url") or (f"https://www.instagram.com/reel/{item['shortCode']}/" if item.get("shortCode") else "")
+        if not url or url in trends or not item.get("videoUrl"):
+            continue
+        views = item.get("videoPlayCount") or item.get("videoViewCount") or 0
+        caption = one_line(html.unescape(item.get("caption") or ""))
+        trends[url] = Trend(
+            id="", platform="Instagram", title=caption[:200] or "видео без подписи", url=url,
+            views=max(0, int(views or 0)), likes=max(0, int(item.get("likesCount") or 0)),
+            author=item.get("ownerUsername") or "", published=item.get("timestamp") or "",
+            video_url=item["videoUrl"], duration=round(float(item.get("videoDuration") or 0), 1))
+    result = sorted(trends.values(), key=lambda t: (t.views, t.likes), reverse=True)
+    return result, len(items)
+
+
 # ─── вместе ──────────────────────────────────────────────────────────────
 def _safe(error: Exception) -> str:
     text = f"{type(error).__name__}: {error}" if not isinstance(error, RuntimeError) else str(error)
-    for secret in (config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN):
+    for secret in (config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN, config.APIFY_TOKEN):
         if secret:
             text = text.replace(secret, "***")
     return one_line(text)[:200]
 
 
 def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
-    """Популярное за сутки с обеих площадок вперемешку: 1-е место YouTube, 1-е место X, 2-е…"""
+    """Популярное за сутки со всех площадок вперемешку: 1-е место YouTube, X, Instagram, потом 2-е…"""
     report: dict[str, str] = {}
-    youtube, x_posts = [], []
+    youtube, x_posts, reels = [], [], []
     if config.YOUTUBE_API_KEY:
         try:
             youtube = youtube_popular(hours)
@@ -233,21 +275,43 @@ def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
             log.warning("X недоступен: %s", _safe(error))
             report["X"] = f"ошибка: {_safe(error)}"
 
+    if config.APIFY_TOKEN:
+        try:
+            reels, got = instagram_popular(hours)
+            report["Instagram"] = f"рилсов: {got} ≈ ${got * config.INSTAGRAM_PRICE_PER_REEL:.2f}"
+        except Exception as error:
+            log.warning("Instagram недоступен: %s", _safe(error))
+            report["Instagram"] = f"ошибка: {_safe(error)}"
+
     per = config.TRENDS_PER_PLATFORM
+    pad = [None] * per
     mixed: list[Trend] = []
-    for pair in zip(youtube[:per] + [None] * per, x_posts[:per] + [None] * per):
-        mixed += [t for t in pair if t is not None]
+    for trio in zip(youtube[:per] + pad, x_posts[:per] + pad, reels[:per] + pad):
+        mixed += [t for t in trio if t is not None]
     for number, trend in enumerate(mixed, 1):
         trend.id = f"t{number}"
     if mixed:
-        log.info("Популярное за сутки: YouTube %d, X %d", min(len(youtube), per), min(len(x_posts), per))
+        log.info("Популярное за сутки: YouTube %d, X %d, Instagram %d",
+                 min(len(youtube), per), min(len(x_posts), per), min(len(reels), per))
     return mixed, report
+
+
+def stats_line(trend: Trend) -> str:
+    """«850 тыс. просмотров · 45 тыс. лайков»."""
+    return " · ".join(x for x in (
+        f"{human_count(trend.views)} просмотров" if trend.views else "",
+        f"{human_count(trend.likes)} лайков" if trend.likes else "") if x)
+
+
+def youtube_id(url: str) -> str:
+    match = re.search(r"(?:v=|/shorts/|youtu\.be/)([\w-]{6,})", url or "")
+    return match.group(1) if match else ""
 
 
 def popularity_note(trends: list[Trend]) -> str:
     """Строка для материалов сценария: сколько посмотрели этот момент."""
-    parts = [f"{human_count(t.views)} просмотров на {'YouTube' if t.platform == 'YouTube' else 'X'}"
-             for t in trends if t.views]
+    parts = [f"{human_count(t.views)} просмотров в {t.platform}" if t.platform != "YouTube"
+             else f"{human_count(t.views)} просмотров на YouTube" for t in trends if t.views]
     if not parts:
         return ""
     return "Популярность: видео с этим моментом набрали " + ", ".join(parts[:3]) + " за сутки."

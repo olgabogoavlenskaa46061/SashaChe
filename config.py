@@ -115,6 +115,12 @@ SKIP_PATTERNS = [
     r"\bprediction", r"\btips\b", r"how to watch", r"tv channel", r"live stream",
 ]
 
+# ─── Откуда брать темы ────────────────────────────────────────────────────
+#   viral — из самых популярных футбольных видео за сутки в X и на YouTube; новости бот читает
+#           только чтобы проверить факты (счёт, кто забил). Если X и YouTube недоступны — из новостей.
+#   news  — из новостей, а популярные видео только поднимают совпавшие темы выше.
+TOPIC_SOURCE = _env("TOPIC_SOURCE", "viral").lower()
+
 # ─── Популярное: YouTube и X (необязательно) ─────────────────────────────
 # Самые просматриваемые футбольные видео за сутки. Claude в первую очередь берёт темы,
 # которые с ними совпадают, а видео из X становится фоном ролика.
@@ -134,9 +140,19 @@ X_MAX_POSTS = int(_env("X_MAX_POSTS", "100"))       # сколько посто�
 X_MIN_LIKES = int(_env("X_MIN_LIKES", "1000"))      # порог лайков для постов больших аккаунтов
 X_VIRAL_LIKES = int(_env("X_VIRAL_LIKES", "5000"))  # порог лайков для постов с любых аккаунтов
 X_PRICE_PER_POST = 0.005
-TRENDS_PER_PLATFORM = 15   # сколько популярных видео с каждой площадки показывать Claude
 
-# Видео из X как фон ролика: 1 — да (если тема совпала с видео), 0 — только стоковые кадры.
+# Instagram — через сервис Apify (рилсы больших футбольных аккаунтов за сутки с просмотрами и видео).
+# $2.60 за 1000 рилсов; на бесплатном тарифе Apify даёт $5 в месяц — около 60 рилсов в день.
+APIFY_TOKEN = _env("APIFY_TOKEN")           # apify.com → Settings → API & Integrations
+INSTAGRAM_ACCOUNTS = _env("INSTAGRAM_ACCOUNTS", "433,brfootball,goal,espnfc,onefootball,sportbible,"
+                                                "fcbarcelona,realmadrid,championsleague,premierleague")
+INSTAGRAM_PER_ACCOUNT = int(_env("INSTAGRAM_PER_ACCOUNT", "6"))   # сколько последних рилсов с аккаунта
+INSTAGRAM_MAX_REELS = int(_env("INSTAGRAM_MAX_REELS", "60"))       # потолок рилсов за день (защита от расходов)
+INSTAGRAM_ACTOR = "apify~instagram-reel-scraper"
+INSTAGRAM_PRICE_PER_REEL = 0.0026
+TRENDS_PER_PLATFORM = int(_env("TRENDS_PER_PLATFORM", "25"))  # сколько популярных видео с каждой площадки показывать Claude
+
+# Видео из X или Instagram как фон ролика: 1 — да (если тема совпала с видео), 0 — только стоковые кадры.
 USE_CLIPS = _env("USE_CLIPS", "1").lower() not in ("0", "false", "no", "нет")
 CLIP_VOLUME = float(_env("CLIP_VOLUME", "0.15"))   # звук исходного видео под голосом (0 — без звука)
 CLIP_ZOOM = float(_env("CLIP_ZOOM", "1.35"))       # горизонтальное видео: во сколько раз крупнее, чем «по ширине»

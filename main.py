@@ -19,6 +19,7 @@ import logging
 import os
 import shutil
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -111,33 +112,68 @@ def cleanup(days: int = 7) -> None:
                 shutil.rmtree(item, ignore_errors=True) if item.is_dir() else item.unlink(missing_ok=True)
 
 
-def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, dict]:
-    """Новости за сутки → темы дня (Claude)."""
-    stories, report = collector.collect()
-    used = history.used_links(hist)
-    stories = [s for s in stories if not any(i.link in used for i in s.all_items)]
-    if not stories:
-        raise RuntimeError("не удалось получить свежие новости ни из одного источника: "
-                           + "; ".join(f"{k} — {v}" for k, v in report.items()))
+def topic_mix(limit: int) -> dict[str, int]:
+    """Сколько тем каждого типа. При ручном запуске на N тем — по одной каждого типа по кругу:
+    2 темы → главное + курьёз, 3 → ещё и интересное."""
     mix = dict(config.SHORTS_MIX)
     if limit and limit < sum(mix.values()):
-        # по одной теме каждого типа по кругу: 2 темы → главное + курьёз, 3 → ещё и интересное
         full, mix = mix, {name: 0 for name in mix}
         while sum(mix.values()) < limit:
             for name in full:
                 if sum(mix.values()) < limit and mix[name] < full[name]:
                     mix[name] += 1
+    return mix
+
+
+def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, dict]:
+    """Темы дня (Claude). По умолчанию — из самых популярных видео за сутки в X, Instagram и на YouTube,
+    новости — только для проверки фактов. Если видео нет — из новостей."""
+    mix = topic_mix(limit)
     popular, popular_report = trends.collect()
-    report.update(popular_report)
     for name, state in popular_report.items():  # видно на странице запуска в GitHub
         if state.startswith("ошибка"):
             _annotation("warning", name, state)
         else:
             github_summary(f"📈 {name}: {state}")
-    selections = ed.select(stories, mix, history.recent_titles(hist), trends=popular)
+    stories, report = collector.collect()
+    report.update(popular_report)
+    used = history.used_links(hist)
+    recent = history.recent_titles(hist)
+
+    if config.TOPIC_SOURCE == "viral":
+        fresh = [t for t in popular if t.url not in used]
+        if fresh:
+            selections = ed.select_viral(fresh, stories, mix, recent)
+            if selections:
+                return selections, report
+            report["Темы"] = "ошибка: среди популярных видео подходящих моментов не нашлось — темы из новостей"
+        elif popular:
+            report["Темы"] = "ошибка: все популярные видео за сутки уже были в роликах — темы из новостей"
+        elif not (config.YOUTUBE_API_KEY or config.X_BEARER_TOKEN or config.APIFY_TOKEN):
+            report["Темы"] = "ошибка: не подключены X, Instagram и YouTube — темы из новостей"
+        else:
+            report["Темы"] = "ошибка: популярные видео не получены — темы из новостей"
+        log.warning(report["Темы"])
+
+    stories = [s for s in stories if not any(i.link in used for i in s.all_items)]
+    if not stories:
+        raise RuntimeError("не удалось получить ни популярные видео, ни свежие новости: "
+                           + "; ".join(f"{k} — {v}" for k, v in report.items()))
+    selections = ed.select(stories, mix, recent, trends=popular)
     if not selections:
         raise RuntimeError("Claude не выбрал ни одной темы")
     return selections, report
+
+
+def material_for(selection) -> tuple[str, list[bytes] | None]:
+    """Материалы и кадры для текста: у темы из популярного видео — подписи, новости для фактов и кадры
+    из видео; у темы из новостей — тексты статей."""
+    if selection.item.id.startswith("video:"):
+        material = articles.viral_material(selection)
+        with tempfile.TemporaryDirectory() as tmp:
+            images = footage.preview_images(selection.trends, Path(tmp))
+        return material, images or None
+    return with_popularity(articles.story_material(selection.item), selection), None
 
 
 def broken_sources(report: dict) -> list[str]:
@@ -146,8 +182,14 @@ def broken_sources(report: dict) -> list[str]:
 
 def popular_summary(report: dict) -> str:
     """«📈 Популярное за сутки: YouTube — видео: 30; X — постов прочитано: 100 ≈ $0.50»."""
-    parts = [f"{k} — {v}" for k, v in report.items() if k in ("YouTube", "X") and not v.startswith("ошибка")]
+    parts = [f"{k} — {v}" for k, v in report.items()
+             if k in ("YouTube", "X", "Instagram") and not v.startswith("ошибка")]
     return "📈 Популярное за сутки: " + "; ".join(parts) if parts else ""
+
+
+def topic_links(selection) -> list[str]:
+    """Ссылки темы для истории: новости и все видео про этот момент — чтобы он не вернулся с другой площадки."""
+    return list(dict.fromkeys([i.link for i in selection.item.all_items] + [t.url for t in selection.trends]))
 
 
 def topic_memo(script) -> str:
@@ -162,7 +204,7 @@ def with_popularity(material: str, selection) -> str:
 
 def _hide_keys(text: str) -> str:
     for secret in (config.TELEGRAM_BOT_TOKEN, config.ANTHROPIC_API_KEY, config.PEXELS_API_KEY,
-                   config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN):
+                   config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN, config.APIFY_TOKEN):
         if secret:
             text = text.replace(secret, "***")
     return text
@@ -283,8 +325,8 @@ def run_scripts(args) -> int:
         scripts = []
         for selection in selections:
             try:
-                material = with_popularity(articles.story_material(selection.item), selection)
-                script = ed.write_script(selection, material, today_text, reader="human")
+                material, images = material_for(selection)
+                script = ed.write_script(selection, material, today_text, reader="human", images=images)
                 script.popular = [t.to_dict() for t in selection.trends]
                 scripts.append((selection, script))
                 log.info("Текст «%s» (%s, %d слов)", script.hook, script.category, script.words)
@@ -309,7 +351,7 @@ def run_scripts(args) -> int:
 
         preview = []
         for number, (selection, script) in enumerate(scripts, 1):
-            links = [i.link for i in selection.item.all_items]
+            links = topic_links(selection)
             if telegram:
                 sent = telegram.send_message(script_message(script, number, total))
                 pending.add(data, sent["message_id"], number, script.to_dict(), links)
@@ -346,8 +388,8 @@ def run_inbox(args) -> int:
 # ─── полностью автоматический режим (нейроголос) ────────────────────────
 def make_short(ed: editor_mod.Editor, selection, number: int, day_dir: Path, hist: dict,
                date_label: str, today_text: str, seed: int) -> dict:
-    material = with_popularity(articles.story_material(selection.item), selection)
-    script = ed.write_script(selection, material, today_text, reader="tts")
+    material, images = material_for(selection)
+    script = ed.write_script(selection, material, today_text, reader="tts", images=images)
     script.popular = [t.to_dict() for t in selection.trends]
     log.info("Сценарий %d: «%s» (%s, %d слов)", number, script.hook, script.category, script.words)
 
@@ -398,7 +440,7 @@ def run_auto(args) -> int:
                                     seed=seed_base + number)
                 results.append(result)
                 history.remember(hist, topic_memo(result["script"]), selection.category,
-                                 [i.link for i in selection.item.all_items], result["footage_ids"])
+                                 topic_links(selection), result["footage_ids"])
             except Exception as error:
                 log.exception("Ролик %d не получился", number)
                 failures.append(f"{selection.item.title[:90]} — {str(error)[:200]}")
