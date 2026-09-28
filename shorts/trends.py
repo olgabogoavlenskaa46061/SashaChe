@@ -332,16 +332,35 @@ def _apify_log_tail(message: str, chars: int = 1500) -> str:
         return ""
 
 
+def _tiktok_input(actor: str, queries: list[str], hashtags: list[str], per_query: int, max_videos: int) -> dict:
+    """Вход для разных сборщиков TikTok в Apify: у каждого свои названия полей."""
+    body: dict = {}
+    if actor.startswith("dami_studio"):
+        body = {"resultsPerPage": max_videos, "maxRunSeconds": 150}
+    elif actor.startswith("clockworks"):
+        body = {"resultsPerPage": per_query, "shouldDownloadVideos": False, "shouldDownloadCovers": False}
+    else:  # igolaizola и похожие
+        body = {"maxVideosPerInput": per_query, "maxTotalVideos": max_videos}
+    if queries:
+        body["searchQueries"] = queries
+    if hashtags:
+        body["hashtags"] = hashtags
+    return body
+
+
 def tiktok_popular(hours: int | None = None, queries: list[str] | None = None, per_query: int | None = None,
                    max_videos: int | None = None, min_plays: int | None = None,
-                   max_charge: float | None = None) -> tuple[list[Trend], int, str]:
+                   max_charge: float | None = None, hashtags: list[str] | None = None,
+                   actor: str | None = None) -> tuple[list[Trend], int, str]:
     """Свежие популярные футбольные видео TikTok (больше всего — снятых с трибун).
     Возвращает видео, сколько получено строк и пометку для отчёта."""
     max_videos = max_videos or config.TIKTOK_MAX_VIDEOS
     min_plays = config.TIKTOK_MIN_PLAYS if min_plays is None else min_plays
-    body = {"searchQueries": queries or config.TIKTOK_QUERIES,
-            "maxVideosPerInput": per_query or config.TIKTOK_PER_QUERY, "maxTotalVideos": max_videos}
-    response = requests.post(APIFY_RUN.format(actor=config.TIKTOK_ACTOR), json=body, timeout=330,
+    actor = actor or config.TIKTOK_ACTOR
+    body = _tiktok_input(actor, config.TIKTOK_QUERIES if queries is None else queries,
+                         config.TIKTOK_HASHTAGS if hashtags is None else hashtags,
+                         per_query or config.TIKTOK_PER_QUERY, max_videos)
+    response = requests.post(APIFY_RUN.format(actor=actor), json=body, timeout=330,
                              params={"maxItems": max_videos,
                                      # сборщик берёт плату за события, а не только за видео: без явного
                                      # потолка в долларах Apify останавливает его сразу после старта
@@ -419,11 +438,25 @@ def youtube_hint(error: str) -> str:
 
 
 def tiktok_check() -> str:
-    """Маленький пробный запрос к сборщику TikTok: 3 видео (≈ $0.001)."""
-    videos, got, note = tiktok_popular(hours=24 * 30, queries=["gol desde la tribuna"], per_query=3,
-                                       max_videos=3, min_plays=0, max_charge=0.02)
-    with_file = sum(1 for v in videos if v.video_url)
-    return f"сборщик TikTok работает (получено видео: {got}, со ссылкой на файл: {with_file}){note}"
+    """Маленькие пробные запросы к сборщикам TikTok (по 3 видео, ≈ $0.001 каждый)."""
+    variants = [("igolaizola~tiktok-scraper", [], ["golazo"]),
+                ("dami_studio~tiktok-scraper", ["gol desde la tribuna"], []),
+                ("dami_studio~tiktok-scraper", [], ["golazo"])]
+    results, ok = [], False
+    for actor, queries, hashtags in variants:
+        what = f"{actor.split('~')[0]} {'поиск' if queries else 'хэштег'}"
+        try:
+            videos, got, note = tiktok_popular(hours=24 * 30, queries=queries, hashtags=hashtags, per_query=3,
+                                               max_videos=3, min_plays=0, max_charge=0.02, actor=actor)
+            with_file = sum(1 for v in videos if v.video_url)
+            results.append(f"✅ {what}: видео {got}, со ссылкой на файл {with_file}{note}")
+            ok = ok or got > 0
+        except Exception as error:
+            results.append(f"❌ {what}: {_safe(error, 300)}")
+    text = " || ".join(results)
+    if not ok:
+        raise RuntimeError(text)
+    return text
 
 
 def x_check() -> str:

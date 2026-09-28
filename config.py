@@ -167,6 +167,8 @@ TIKTOK_QUERIES = [q.strip() for q in _env(
     "TIKTOK_QUERIES",
     "gol desde la tribuna;golazo desde la grada;hinchada gol;fan view goal stadium;"
     "football fans stadium goal reaction;гол с трибуны;фанаты на стадионе гол").split(";") if q.strip()]
+TIKTOK_HASHTAGS = [h.strip().lstrip("#") for h in _env(
+    "TIKTOK_HASHTAGS", "hinchada;golazo;tribuna;ultras;стадион").split(";") if h.strip()]
 TIKTOK_PER_QUERY = int(_env("TIKTOK_PER_QUERY", "20"))
 TIKTOK_MAX_VIDEOS = int(_env("TIKTOK_MAX_VIDEOS", "150"))   # потолок за запуск (≈ $0.03)
 TIKTOK_MIN_PLAYS = int(_env("TIKTOK_MIN_PLAYS", "20000"))
