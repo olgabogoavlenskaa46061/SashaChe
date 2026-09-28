@@ -569,7 +569,7 @@ def run_check(args) -> int:
         try:
             add(name, True, check())
         except Exception as error:
-            text = trends._safe(error)
+            text = trends._safe(error, 1800)
             add(name, False, hint(text) or text)
 
     lines = [f"{'✅' if ok else '❌'} {name}: {text}" for name, ok, text in rows]

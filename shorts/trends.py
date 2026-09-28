@@ -458,12 +458,12 @@ def apify_check() -> str:
 
 
 # ─── вместе ──────────────────────────────────────────────────────────────
-def _safe(error: Exception) -> str:
+def _safe(error: Exception, limit: int = 200) -> str:
     text = f"{type(error).__name__}: {error}" if not isinstance(error, RuntimeError) else str(error)
     for secret in (config.YOUTUBE_API_KEY, config.X_BEARER_TOKEN, config.APIFY_TOKEN):
         if secret and len(secret) >= 8:
             text = text.replace(secret, "***")
-    return one_line(text)[:200]
+    return one_line(text)[:limit]
 
 
 def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
