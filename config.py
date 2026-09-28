@@ -161,20 +161,25 @@ INSTAGRAM_ACTOR = "apify~instagram-reel-scraper"
 INSTAGRAM_PRICE_PER_REEL = 0.0026
 
 # TikTok — тоже через Apify (тот же APIFY_TOKEN): там больше всего видео болельщиков с трибун.
-# Ищем по запросам, оставляем свежие (до TIKTOK_MAX_AGE_HOURS) и популярные (от TIKTOK_MIN_PLAYS просмотров).
+# Claude выбирает самые яркие свежие моменты дня из YouTube, X и Instagram и для каждого пишет запрос —
+# так бот ищет в TikTok съёмку с трибун именно этих моментов. Оставляем только свежие видео
+# (до TIKTOK_MAX_AGE_HOURS) и не совсем безвестные (от TIKTOK_MIN_PLAYS просмотров).
 TIKTOK_ACTOR = _env("TIKTOK_ACTOR", "dami_studio~tiktok-scraper")   # $0.25 за 1000 видео, поиск работает
+TIKTOK_SEARCHES = int(_env("TIKTOK_SEARCHES", "6"))      # сколько моментов искать (0 — TikTok выключен)
+TIKTOK_PER_QUERY = int(_env("TIKTOK_PER_QUERY", "25"))   # видео на один поиск: 6 × 25 = 150 ≈ $0.04
+TIKTOK_PARALLEL = int(_env("TIKTOK_PARALLEL", "2"))      # сколько поисков идут одновременно
+# Запасные запросы — если моменты дня выбрать не получилось. Такие общие поиски TikTok отдаёт в основном
+# старыми хитами, свежих среди них мало.
 TIKTOK_QUERIES = [q.strip() for q in _env(
     "TIKTOK_QUERIES",
     "gol desde la tribuna;golazo desde la grada;hinchada gol;fan view goal stadium;"
-    "football fans stadium goal reaction;гол с трибуны;фанаты на стадионе гол").split(";") if q.strip()]
-TIKTOK_HASHTAGS = [h.strip().lstrip("#") for h in _env(
-    "TIKTOK_HASHTAGS", "hinchada;golazo;tribuna;ultras;стадион").split(";") if h.strip()]
-TIKTOK_PER_QUERY = int(_env("TIKTOK_PER_QUERY", "20"))
-TIKTOK_MAX_VIDEOS = int(_env("TIKTOK_MAX_VIDEOS", "150"))   # потолок за запуск (≈ $0.03)
-TIKTOK_MIN_PLAYS = int(_env("TIKTOK_MIN_PLAYS", "20000"))
+    "football fans stadium goal reaction;гол с трибуны").split(";") if q.strip()]
+# Хэштеги (через ;) — по умолчанию нет: TikTok отдаёт по ним лучшие видео за всё время, а не свежие.
+TIKTOK_HASHTAGS = [h.strip().lstrip("#") for h in (_env("TIKTOK_HASHTAGS", "") or "").split(";") if h.strip()]
+TIKTOK_MIN_PLAYS = int(_env("TIKTOK_MIN_PLAYS", "3000"))
 TIKTOK_MAX_AGE_HOURS = int(_env("TIKTOK_MAX_AGE_HOURS", "48"))
 TIKTOK_PRICE_PER_VIDEO = 0.00025
-TIKTOK_MAX_CHARGE_USD = float(_env("TIKTOK_MAX_CHARGE_USD", "0.10"))  # потолок стоимости одного запуска в Apify
+TIKTOK_MAX_CHARGE_USD = float(_env("TIKTOK_MAX_CHARGE_USD", "0.05"))  # потолок стоимости одного поиска в Apify
 TRENDS_PER_PLATFORM = int(_env("TRENDS_PER_PLATFORM", "25"))  # сколько популярных видео с каждой площадки показывать Claude
 
 # Какие видео брать фоном ролика: stands — только снятые болельщиками с трибун (Claude смотрит обложку

@@ -54,6 +54,7 @@ jobs:
           INSTAGRAM_ACCOUNTS: ${{ vars.INSTAGRAM_ACCOUNTS }}
           TIKTOK_QUERIES: ${{ vars.TIKTOK_QUERIES }}
           TIKTOK_MIN_PLAYS: ${{ vars.TIKTOK_MIN_PLAYS }}
+          TIKTOK_SEARCHES: ${{ vars.TIKTOK_SEARCHES }}
           TOPIC_SOURCE: ${{ vars.TOPIC_SOURCE }}
           X_MAX_POSTS: ${{ vars.X_MAX_POSTS }}
           X_ACCOUNTS: ${{ vars.X_ACCOUNTS }}

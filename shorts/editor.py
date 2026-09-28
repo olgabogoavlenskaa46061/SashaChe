@@ -310,14 +310,76 @@ class Editor:
                     labels[tid] = row["kind"]
         return labels
 
+    # ── 1а'. Какие моменты дня искать в TikTok (съёмка с трибун) ─────────
+    def tiktok_queries(self, trends: list, count: int, recent_titles: list[str] | None = None) -> list[tuple]:
+        """Самые яркие свежие моменты дня → запросы для поиска в TikTok видео болельщиков с трибун.
+        Возвращает пары (запрос, видео момента)."""
+        if not trends or count <= 0:
+            return []
+        by_id = {}
+        lines = []
+        for number, t in enumerate(trends, 1):
+            vid = f"v{number}"
+            by_id[vid] = t
+            author = f" · {t.author}" if t.author else ""
+            descr = f" — {t.description[:120]}" if t.description else ""
+            lines.append(f"[{vid}] {t.platform}{author} · {_stats(t)} · «{t.title[:160]}»{descr}")
+        recent = "\n".join(f"- {t}" for t in (recent_titles or [])[-40:]) or "- (пока ничего)"
+        system = f"""Ты помогаешь футбольному каналу «{config.CHANNEL_NAME}» найти в TikTok видео, которые болельщики сняли на телефон с трибуны, — про самые яркие моменты дня. {AUDIENCE}
+
+Ниже — самые популярные футбольные видео за сутки. Выбери до {count} разных моментов из вчерашних и сегодняшних матчей, которые лучше всего подходят каналу: громкие, жёсткие или смешные, со звёздами и топ-клубами, над которыми можно пошутить. {NO_NAMES}
+Не бери тренировки, интервью, рекламу, старые моменты, подборки, другие виды спорта и то, что уже выходило (список ниже). Один матч — один момент.
+
+Для каждого момента напиши запрос для поиска в TikTok — такими словами болельщики, которые были на стадионе, подписывают свои видео:
+- 3–6 слов на языке болельщиков этой команды (испанский, английский, португальский, русский…);
+- кто и против кого: игрок или клуб и соперник (или стадион) и что случилось: gol, golazo, penal, roja, tiro libre, atajada, pelea…;
+- можно добавить одно слово про трибуну: tribuna, desde la grada, fan view, from the stands, с трибуны;
+- без хештегов, кавычек и эмодзи.
+Например: «gol Mbappé Bernabéu desde la grada», «Messi tiro libre Columbus tribuna», «Palmer gol Arsenal fans Stamford Bridge».
+
+Уже выходили:
+{recent}
+
+В поле video — ровно тот id, что в квадратных скобках (например, v3). Сначала самые сильные моменты."""
+        schema = {
+            "type": "object",
+            "properties": {"moments": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"video": {"type": "string", "description": "id видео момента (v1, v2…)"},
+                               "query": {"type": "string", "description": "запрос для поиска в TikTok"}},
+                "required": ["video", "query"], "additionalProperties": False}}},
+            "required": ["moments"], "additionalProperties": False,
+        }
+        user = ("Популярные футбольные видео за сутки (id · площадка · автор · просмотры · лайки · "
+                "название или текст поста — описание):\n\n" + "\n".join(lines))
+        data = self._ask(system, user, schema, max_tokens=1500)
+        result: list[tuple] = []
+        seen: set[str] = set()
+        for row in data.get("moments", []):
+            trend = by_id.get(str(row.get("video", "")).strip("[] "))
+            query = " ".join(str(row.get("query", "")).replace("#", " ").split()).strip(" «»\"'")[:80]
+            if trend is None or not query or query.lower() in seen:
+                continue
+            seen.add(query.lower())
+            result.append((query, trend))
+            if len(result) >= count:
+                break
+        log.info("Ищу в TikTok съёмку с трибун: %s", "; ".join(q for q, _ in result) or "—")
+        return result
+
     # ── 1б. Выбор тем из популярных видео (YouTube и X) ──────────────────
     def select_viral(self, trends: list, news: list[NewsItem], mix: dict[str, int],
                      recent_titles: list[str], max_news: int = 250,
                      used_links: set[str] | None = None, exact: bool = True,
-                     stands_round: bool = False) -> list[Selection]:
-        """Темы — самые популярные футбольные моменты за сутки. Новости — только чтобы сверить факты."""
+                     stands_round: bool = False, context: list | None = None) -> list[Selection]:
+        """Темы — самые популярные футбольные моменты за сутки. Новости — только чтобы сверить факты.
+        trends — из чего выбирать главное видео темы; context — все видео дня (в поле also можно
+        указать любое из них, например видео момента, к которому в TikTok искали съёмку с трибун)."""
         tz = ZoneInfo(config.TIMEZONE)
         trend_by_id = {t.id: t for t in trends}
+        all_by_id = {t.id: t for t in (context or [])}
+        all_by_id.update(trend_by_id)
+        id_by_url = {t.url: t.id for t in all_by_id.values()}
         news_by_id = {n.id: n for n in news[:max_news]}
         wanted = "\n".join(f"- {count} × «{name}»" for name, count in mix.items() if count > 0)
         total = sum(mix.values())
@@ -342,7 +404,12 @@ class Editor:
             length = f" · {round(t.duration)} с" if t.duration else ""
             author = f" · {t.author}" if t.author else ""
             descr = f" — {t.description[:150]}" if t.description else ""
-            videos.append(f"[{t.id}] {t.platform}{author} · {_stats(t)}{length}{extra} · {when} · «{t.title}»{descr}")
+            found = ""
+            if getattr(t, "origin", ""):
+                origin_id = id_by_url.get(t.origin)
+                found = (f" · искали к моменту{f' [{origin_id}]' if origin_id else ''} "
+                         f"«{t.origin_title[:100]}» (запрос «{t.query}»)")
+            videos.append(f"[{t.id}] {t.platform}{author} · {_stats(t)}{length}{extra} · {when} · «{t.title}»{descr}{found}")
         used_links = used_links or set()
         headlines = [f"[{n.id}] {n.published.astimezone(tz):%d.%m %H:%M} · {', '.join(n.sources)} · {n.title}"
                      + (" · ⚠️ уже было в роликах" if any(i.link in used_links for i in n.all_items) else "")
@@ -351,22 +418,27 @@ class Editor:
         how_many = (f"Верни ровно {total} тем (не больше) в порядке от самой сильной к слабой." if exact else
                     f"Верни не больше {total} тем — только действительно достойные, лучше меньше, чем слабые. "
                     "Если достойных нет, верни пустой список. Порядок — от самой сильной к слабой.")
+        tiktok_rule = ("- Видео из TikTok с пометкой «искали к моменту [tN]» нашлись по запросу про популярный момент "
+                       "дня. Если по подписи и времени видно, что это тот же матч и тот же момент, укажи tN в поле also — "
+                       "оттуда возьмутся факты для текста. Если подпись о другом матче или ничего не говорит — "
+                       "не выдавай видео за этот момент: tN в also не добавляй.")
         if stands_round:
             clip_rule = ("- Здесь только видео, снятые болельщиками с трибун, — их и берём в ролик. Кроме моментов "
                          "матча подходит и жизнь трибун: баннеры и перформансы, кричалки, реакция фанатов на гол, "
                          "звезда у трибуны, выходки болельщиков — если клуб или игрок известны нашей аудитории "
-                         "и матч свежий. Над таким тоже можно жёстко пошутить.")
+                         "и матч свежий. Над таким тоже можно жёстко пошутить.\n" + tiktok_rule)
         elif config.CLIP_SOURCE == "stands":
             clip_rule = ("- В ролик берём только видео, снятые болельщиками с трибун (пометка «снято с трибун»), "
                          "а не телетрансляции. В первую очередь бери моменты, у которых есть такое видео, и указывай "
                          "его главным, остальные видео про этот момент — в поле also. Момент только с телетрансляцией "
-                         "бери, лишь если достойных моментов с трибун не хватает: тогда в ролике будут общие кадры стадиона.")
+                         "бери, лишь если достойных моментов с трибун не хватает: тогда в ролике будут общие кадры стадиона.\n"
+                         + tiktok_rule)
         else:
             clip_rule = ("- Если один и тот же момент есть на нескольких площадках, главным укажи видео с пометкой "
                          "«видео можно взять в ролик» (из X или Instagram), остальные — в поле also.")
         system = f"""Ты — шеф-редактор футбольного канала «{config.CHANNEL_NAME}» с короткими вертикальными видео. Автор — Саша, болельщик, который комментирует футбол своим голосом и с иронией. {AUDIENCE}
 
-Каждый день ты выбираешь темы из самых популярных футбольных видео за сутки в X, Instagram и на YouTube: что люди смотрят и лайкают больше всего. Сегодня нужно {total} тем:
+Каждый день ты выбираешь темы из самых популярных футбольных видео за сутки в X, Instagram, TikTok и на YouTube: что люди смотрят и лайкают больше всего. Сегодня нужно {total} тем:
 {wanted}
 
 Что значат категории:
@@ -434,7 +506,7 @@ class Editor:
                 continue
             others = []
             for trend_id in row.get("also") or []:
-                other = trend_by_id.get(str(trend_id).strip("[] "))
+                other = all_by_id.get(str(trend_id).strip("[] "))
                 if other is not None and other is not main and other not in others and other.id not in used:
                     others.append(other)
             related = []

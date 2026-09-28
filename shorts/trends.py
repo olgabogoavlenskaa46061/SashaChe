@@ -1,12 +1,13 @@
-"""Популярное за сутки: самые просматриваемые футбольные видео на YouTube и в X.
+"""Популярное за сутки: самые просматриваемые футбольные видео на YouTube, в X, Instagram и TikTok.
 
-Claude получает этот список как подсказку, какие моменты сейчас смотрят больше всего,
-и в первую очередь выбирает сюжеты, которые с ними совпадают. Из X бот берёт ещё и само
-видео (прямую ссылку на mp4) — оно становится фоном ролика.
+Из них Claude выбирает темы дня. Из X, Instagram и TikTok бот берёт ещё и само видео (прямую
+ссылку на mp4) — видео с трибун становится фоном ролика. В TikTok бот ищет съёмку с трибун
+тех моментов, которые сегодня популярны на других площадках.
 
-Оба источника необязательны: без ключей бот работает только по новостям.
+Все источники необязательны: без ключей бот работает только по новостям.
     YOUTUBE_API_KEY — бесплатно (10 000 единиц в день, бот тратит около 200);
-    X_BEARER_TOKEN  — платно: $0.005 за каждый прочитанный пост.
+    X_BEARER_TOKEN  — платно: $0.005 за каждый прочитанный пост;
+    APIFY_TOKEN     — Instagram и TikTok, платно: несколько центов в день.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
+from itertools import zip_longest
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -47,6 +49,9 @@ class Trend:
     description: str = ""   # описание видео (YouTube)
     thumb_url: str = ""     # обложка видео — по ней Claude понимает, как снято
     footage: str = ""       # stands — снято с трибун, broadcast — трансляция, other — не матч по футболу
+    query: str = ""         # TikTok: по какому запросу нашлось
+    origin: str = ""        # TikTok: ссылка на популярное видео момента, к которому искали съёмку с трибун
+    origin_title: str = ""  # TikTok: название того видео
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -88,6 +93,22 @@ def human_count(n: int) -> str:
 
 def _since(hours: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_time(value) -> datetime | None:
+    """Время из ISO-строки («2026-09-27T21:19:04.000Z») или из числа секунд (миллисекунд) с 1970 года."""
+    if value is None or isinstance(value, bool) or value == "":
+        return None
+    try:
+        if isinstance(value, (int, float)) or str(value).strip().isdigit():
+            seconds = float(value)
+            if seconds > 1e11:  # миллисекунды
+                seconds /= 1000
+            return datetime.fromtimestamp(seconds, timezone.utc)
+        parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 def _get_json(url: str, params: dict, headers: dict) -> dict:
@@ -273,12 +294,16 @@ def instagram_popular(hours: int = 24) -> tuple[list[Trend], int]:
         message = (error or {}).get("message") if isinstance(error, dict) else None
         raise RuntimeError(f"HTTP {response.status_code}: {one_line(message or response.text[:200])[:200]}")
     items = data if isinstance(data, list) else []
+    border = datetime.now(timezone.utc) - timedelta(hours=hours + 2)
     trends: dict[str, Trend] = {}
     for item in items:
         if not isinstance(item, dict) or item.get("error"):
             continue
         url = item.get("url") or (f"https://www.instagram.com/reel/{item['shortCode']}/" if item.get("shortCode") else "")
         if not url or url in trends or not item.get("videoUrl"):
+            continue
+        when = _parse_time(item.get("timestamp"))
+        if when and when < border:  # сборщик и сам отсекает старое, это страховка
             continue
         views = item.get("videoPlayCount") or item.get("videoViewCount") or 0
         caption = one_line(html.unescape(item.get("caption") or ""))
@@ -332,39 +357,52 @@ def _apify_log_tail(message: str, chars: int = 1500) -> str:
         return ""
 
 
-def _tiktok_input(actor: str, queries: list[str], hashtags: list[str], per_query: int, max_videos: int) -> dict:
-    """Вход для разных сборщиков TikTok в Apify: у каждого свои названия полей."""
-    body: dict = {}
+def _tiktok_time(item: dict, url: str) -> datetime | None:
+    """Когда опубликовано видео TikTok. Надёжнее всего — по номеру видео: его старшие 32 бита — это
+    секунды с 1970 года. Если номера нет — по полю даты (сборщики называют его по-разному:
+    createTimeISO, createTime строкой или числом…). Непонятно — None."""
+    now = datetime.now(timezone.utc)
+    earliest = datetime(2016, 9, 1, tzinfo=timezone.utc)  # раньше TikTok не было
+
+    def sane(when: datetime | None) -> datetime | None:
+        return when if when and earliest <= when <= now + timedelta(hours=2) else None
+
+    match = re.search(r"/(?:video|photo)/(\d{15,})", url or "")
+    video_id = match.group(1) if match else str(item.get("id") or "")
+    if video_id.isdigit() and len(video_id) >= 15:
+        when = sane(datetime.fromtimestamp(int(video_id) >> 32, timezone.utc))
+        if when:
+            return when
+    for key in ("createTimeISO", "createTime", "createdAt", "create_time", "uploadedAt", "publishedAt"):
+        when = sane(_parse_time(item.get(key)))
+        if when:
+            return when
+    return None
+
+
+def _tiktok_input(actor: str, query: str, limit: int) -> dict:
+    """Вход для одного поиска у разных сборщиков TikTok в Apify: у каждого свои названия полей.
+    Запрос, начинающийся с #, — хэштег."""
     if actor.startswith("dami_studio"):
-        body = {"resultsPerPage": max_videos, "maxRunSeconds": 150}
+        body: dict = {"resultsPerPage": limit, "maxRunSeconds": 90}
     elif actor.startswith("clockworks"):
-        body = {"resultsPerPage": per_query, "shouldDownloadVideos": False, "shouldDownloadCovers": False}
+        body = {"resultsPerPage": limit, "shouldDownloadVideos": False, "shouldDownloadCovers": False}
     else:  # igolaizola и похожие
-        body = {"maxVideosPerInput": per_query, "maxTotalVideos": max_videos}
-    if queries:
-        body["searchQueries"] = queries
-    if hashtags:
-        body["hashtags"] = hashtags
+        body = {"maxVideosPerInput": limit, "maxTotalVideos": limit}
+    if query.startswith("#"):
+        body["hashtags"] = [query.lstrip("#")]
+    else:
+        body["searchQueries"] = [query]
     return body
 
 
-def tiktok_popular(hours: int | None = None, queries: list[str] | None = None, per_query: int | None = None,
-                   max_videos: int | None = None, min_plays: int | None = None,
-                   max_charge: float | None = None, hashtags: list[str] | None = None,
-                   actor: str | None = None) -> tuple[list[Trend], int, str]:
-    """Свежие популярные футбольные видео TikTok (больше всего — снятых с трибун).
-    Возвращает видео, сколько получено строк и пометку для отчёта."""
-    max_videos = max_videos or config.TIKTOK_MAX_VIDEOS
-    min_plays = config.TIKTOK_MIN_PLAYS if min_plays is None else min_plays
-    actor = actor or config.TIKTOK_ACTOR
-    body = _tiktok_input(actor, config.TIKTOK_QUERIES if queries is None else queries,
-                         config.TIKTOK_HASHTAGS if hashtags is None else hashtags,
-                         per_query or config.TIKTOK_PER_QUERY, max_videos)
-    response = requests.post(APIFY_RUN.format(actor=actor), json=body, timeout=330,
-                             params={"maxItems": max_videos,
+def _tiktok_run(actor: str, query: str, limit: int, max_charge: float) -> list[dict]:
+    """Один поиск в TikTok через Apify — не больше limit видео."""
+    response = requests.post(APIFY_RUN.format(actor=actor), json=_tiktok_input(actor, query, limit), timeout=330,
+                             params={"maxItems": limit,
                                      # сборщик берёт плату за события, а не только за видео: без явного
                                      # потолка в долларах Apify останавливает его сразу после старта
-                                     "maxTotalChargeUsd": max_charge or config.TIKTOK_MAX_CHARGE_USD},
+                                     "maxTotalChargeUsd": max_charge},
                              headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
     try:
         data = response.json()
@@ -375,42 +413,97 @@ def tiktok_popular(hours: int | None = None, queries: list[str] | None = None, p
         message = (error or {}).get("message") if isinstance(error, dict) else None
         message = one_line(message or response.text[:200])[:200]
         raise RuntimeError(f"HTTP {response.status_code}: {message}{_apify_log_tail(message)}")
-    items = [i for i in (data if isinstance(data, list) else []) if isinstance(i, dict) and not i.get("error")]
-    border = datetime.now(timezone.utc) - timedelta(hours=hours or config.TIKTOK_MAX_AGE_HOURS)
-    trends: dict[str, Trend] = {}
-    with_file = 0
-    for item in items:
-        url = str(_first(item, "webVideoUrl", "url", "shareUrl") or "")
-        if not url or url in trends:
-            continue
-        published = str(_first(item, "createTimeISO") or "")
-        if not published and item.get("createTime"):
-            try:
-                published = datetime.fromtimestamp(int(item["createTime"]), timezone.utc).isoformat()
-            except (TypeError, ValueError):
-                published = ""
+    return [i for i in (data if isinstance(data, list) else []) if isinstance(i, dict) and not i.get("error")]
+
+
+@dataclass
+class TikTokResult:
+    videos: list            # свежие популярные видео (Trend) — по очереди из каждого поиска
+    got: int = 0            # сколько видео отдал сборщик (за них платим)
+    old: int = 0            # отброшено: старше TIKTOK_MAX_AGE_HOURS или непонятно, когда снято
+    failed: int = 0         # сколько поисков не сработало
+    note: str = ""          # подсказка для отчёта
+
+
+def tiktok_popular(plan: list | None = None, hours: int | None = None, per_query: int | None = None,
+                   min_plays: int | None = None, max_charge: float | None = None,
+                   actor: str | None = None) -> TikTokResult:
+    """Свежие популярные футбольные видео TikTok.
+
+    plan — поиски: пары (запрос, популярное видео момента, к которому ищем съёмку с трибун, или None).
+    Без plan — общие запросы из TIKTOK_QUERIES. Каждый поиск — отдельный запуск в Apify: лимит видео
+    у сборщика общий на запуск, и первый запрос съел бы его целиком."""
+    if plan is None:
+        plan = [(q, None) for q in config.TIKTOK_QUERIES[:max(1, config.TIKTOK_SEARCHES)]]
+        plan += [(f"#{h}", None) for h in config.TIKTOK_HASHTAGS]
+    per_query = per_query or config.TIKTOK_PER_QUERY
+    min_plays = config.TIKTOK_MIN_PLAYS if min_plays is None else min_plays
+    max_charge = max_charge or config.TIKTOK_MAX_CHARGE_USD
+    actor = actor or config.TIKTOK_ACTOR
+    result = TikTokResult(videos=[])
+    if not plan:
+        return result
+
+    def run(query: str):
         try:
-            if published and datetime.fromisoformat(published.replace("Z", "+00:00")) < border:
+            return _tiktok_run(actor, query, per_query, max_charge), None
+        except Exception as error:
+            return [], error
+
+    with ThreadPoolExecutor(max_workers=max(1, config.TIKTOK_PARALLEL)) as pool:
+        outcomes = list(pool.map(run, [query for query, _ in plan]))
+    for number, (_, error) in enumerate(outcomes):
+        # Apify не дал запустить несколько поисков сразу (лимит памяти на тарифе) — повторяем по одному
+        if error is not None and re.search(r"memory|concurren", str(error), re.IGNORECASE):
+            outcomes[number] = run(plan[number][0])
+    errors = [error for _, error in outcomes if error is not None]
+    if len(errors) == len(plan):
+        raise errors[0] if isinstance(errors[0], RuntimeError) else RuntimeError(_safe(errors[0], 1500))
+
+    border = datetime.now(timezone.utc) - timedelta(hours=hours or config.TIKTOK_MAX_AGE_HOURS)
+    seen: set[str] = set()
+    per_search: list[list[Trend]] = []
+    with_file = 0
+    sample: dict = {}
+    for (query, origin), (items, _) in zip(plan, outcomes):
+        found = []
+        for item in items:
+            result.got += 1
+            sample = sample or item
+            url = str(_first(item, "webVideoUrl", "url", "shareUrl") or "")
+            if not url or url in seen:
                 continue
-        except ValueError:
-            pass
-        plays = int(_first(item, "playCount", "stats.playCount") or 0)
-        if plays < min_plays:
-            continue
-        video_url = _tiktok_video_url(item)
-        with_file += bool(video_url)
-        trends[url] = Trend(
-            id="", platform="TikTok", title=one_line(html.unescape(str(item.get("text") or "")))[:200] or "видео без подписи",
-            url=url, views=plays, likes=int(_first(item, "diggCount", "stats.diggCount") or 0),
-            author=str(_first(item, "authorMeta.name", "author.uniqueId", "author.nickname") or ""),
-            published=published, video_url=video_url,
-            duration=round(float(_first(item, "videoMeta.duration", "video.duration", "duration") or 0), 1),
-            thumb_url=str(_first(item, "videoMeta.coverUrl", "video.cover", "covers.default", "cover") or ""))
-    note = ""
-    if items and not with_file:  # подсказка для отладки, если сборщик отдаёт видео под другим полем
-        note = " (без ссылок на файл; поля: " + ", ".join(sorted(items[0])[:25]) + ")"
-    result = sorted(trends.values(), key=lambda t: (t.views, t.likes), reverse=True)
-    return result, len(items), note
+            seen.add(url)
+            when = _tiktok_time(item, url)
+            if when is None or when < border:  # старое или непонятно, когда снято, — мимо
+                result.old += 1
+                continue
+            plays = int(_first(item, "playCount", "stats.playCount") or 0)
+            if plays < min_plays:
+                continue
+            video_url = _tiktok_video_url(item)
+            with_file += bool(video_url)
+            found.append(Trend(
+                id="", platform="TikTok",
+                title=one_line(html.unescape(str(item.get("text") or "")))[:200] or "видео без подписи",
+                url=url, views=plays, likes=int(_first(item, "diggCount", "stats.diggCount") or 0),
+                author=str(_first(item, "authorMeta.name", "author.uniqueId", "author.nickname") or ""),
+                published=when.isoformat(), video_url=video_url,
+                duration=round(float(_first(item, "videoMeta.duration", "video.duration", "duration") or 0), 1),
+                thumb_url=str(_first(item, "videoMeta.coverUrl", "video.cover", "covers.default", "cover") or ""),
+                query=query, origin=origin.url if origin is not None else "",
+                origin_title=origin.title[:150] if origin is not None else ""))
+        found.sort(key=lambda t: (t.views, t.likes), reverse=True)
+        per_search.append(found)
+    # по очереди из каждого поиска — чтобы в списке были все моменты, а не только самый вирусный
+    for row in zip_longest(*per_search):
+        result.videos += [t for t in row if t is not None]
+    result.failed = len(errors)
+    if result.videos and not with_file:  # подсказка для отладки: сборщик отдаёт видео под другим полем
+        result.note = " (без ссылок на файл; поля: " + ", ".join(sorted(sample)[:25]) + ")"
+    if errors:
+        result.note += f"; не сработало поисков: {len(errors)} ({_safe(errors[0], 150)})"
+    return result
 
 
 # ─── проверка ключей ─────────────────────────────────────────────────────
@@ -438,11 +531,11 @@ def youtube_hint(error: str) -> str:
 
 
 def tiktok_check() -> str:
-    """Маленький пробный запрос к сборщику TikTok: 3 видео (≈ $0.001)."""
-    videos, got, note = tiktok_popular(hours=24 * 30, queries=["gol desde la tribuna"], hashtags=[], per_query=3,
-                                       max_videos=3, min_plays=0, max_charge=0.02)
-    with_file = sum(1 for v in videos if v.video_url)
-    return f"сборщик TikTok работает (получено видео: {got}, со ссылкой на файл: {with_file}){note}"
+    """Маленький пробный поиск в TikTok: 3 видео (≈ $0.001), дата не важна."""
+    found = tiktok_popular([("gol desde la tribuna", None)], hours=24 * 365 * 10, per_query=3, min_plays=0,
+                           max_charge=0.02)
+    with_file = sum(1 for v in found.videos if v.video_url)
+    return f"сборщик TikTok работает (получено видео: {found.got}, со ссылкой на файл: {with_file}){found.note}"
 
 
 def x_check() -> str:
@@ -485,8 +578,18 @@ def _safe(error: Exception, limit: int = 200) -> str:
     return one_line(text)[:limit]
 
 
-def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
-    """Популярное за сутки со всех площадок вперемешку: 1-е место YouTube, X, Instagram, потом 2-е…"""
+def _interleave(*buckets: list[Trend]) -> list[Trend]:
+    """1-е место каждой площадки, потом 2-е… — не больше TRENDS_PER_PLATFORM с площадки."""
+    per = config.TRENDS_PER_PLATFORM
+    rows = zip_longest(*(bucket[:per] for bucket in buckets))
+    return [t for row in rows for t in row if t is not None]
+
+
+def collect(hours: int = 24, tiktok_planner=None) -> tuple[list[Trend], dict[str, str]]:
+    """Популярное за сутки со всех площадок вперемешку: 1-е место YouTube, X, Instagram, TikTok, потом 2-е…
+
+    tiktok_planner(видео) → [(запрос, видео момента)] — по каким моментам дня искать в TikTok съёмку
+    с трибун (выбирает Claude). Без него или если не вышло — общие запросы из TIKTOK_QUERIES."""
     report: dict[str, str] = {}
     youtube, x_posts, reels = [], [], []
     if config.YOUTUBE_API_KEY:
@@ -519,32 +622,47 @@ def collect(hours: int = 24) -> tuple[list[Trend], dict[str, str]]:
             report["Instagram"] = f"ошибка: {_safe(error)}"
     else:
         report["Instagram"] = "не подключён (нет секрета APIFY_TOKEN)"
-    tiktok: list[Trend] = []
-    if config.APIFY_TOKEN and config.TIKTOK_QUERIES:
-        try:
-            tiktok, got, note = tiktok_popular()
-            report["TikTok"] = (f"свежих популярных видео: {len(tiktok)} из {got} ≈ "
-                                f"${got * config.TIKTOK_PRICE_PER_VIDEO:.2f}{note}")
-        except Exception as error:
-            log.warning("TikTok недоступен: %s", _safe(error))
-            report["TikTok"] = f"ошибка: {_safe(error)}"
-
     dropped = 0
-    for bucket in (youtube, x_posts, reels, tiktok):
+    for bucket in (youtube, x_posts, reels):
         keep = [t for t in bucket if not other_sport(t)]
         dropped += len(bucket) - len(keep)
         bucket[:] = keep
+
+    tiktok: list[Trend] = []
+    if config.APIFY_TOKEN and config.TIKTOK_SEARCHES > 0:
+        plan: list = []
+        candidates = _interleave(youtube, x_posts, reels)
+        if tiktok_planner is not None and candidates:
+            try:
+                plan = list(tiktok_planner(candidates) or [])
+            except Exception as error:
+                log.warning("Не получилось выбрать моменты для поиска в TikTok: %s", _safe(error))
+        targeted = bool(plan)
+        if not plan:
+            plan = [(q, None) for q in config.TIKTOK_QUERIES[:config.TIKTOK_SEARCHES]]
+            plan += [(f"#{h}", None) for h in config.TIKTOK_HASHTAGS]
+        try:
+            found = tiktok_popular(plan)
+            tiktok = found.videos
+            kind = "по моментам дня" if targeted else "общих"
+            report["TikTok"] = (f"свежих видео: {len(tiktok)} из {found.got}, поисков {kind}: {len(plan)} ≈ "
+                                f"${found.got * config.TIKTOK_PRICE_PER_VIDEO:.2f}{found.note}")
+            report["TikTok поиск"] = (f"старше {config.TIKTOK_MAX_AGE_HOURS} ч отброшено: {found.old} · "
+                                      "запросы: " + "; ".join(q for q, _ in plan))[:900]
+        except Exception as error:
+            log.warning("TikTok недоступен: %s", _safe(error))
+            report["TikTok"] = f"ошибка: {_safe(error)}"
+        keep = [t for t in tiktok if not other_sport(t)]
+        dropped += len(tiktok) - len(keep)
+        tiktok = keep
     if dropped:
         log.info("Отброшено видео про другой спорт (американский футбол и т. п.): %d", dropped)
 
-    per = config.TRENDS_PER_PLATFORM
-    pad = [None] * per
-    mixed: list[Trend] = []
-    for row in zip(youtube[:per] + pad, x_posts[:per] + pad, reels[:per] + pad, tiktok[:per] + pad):
-        mixed += [t for t in row if t is not None]
+    mixed = _interleave(youtube, x_posts, reels, tiktok)
     for number, trend in enumerate(mixed, 1):
         trend.id = f"t{number}"
     if mixed:
+        per = config.TRENDS_PER_PLATFORM
         log.info("Популярное за сутки: YouTube %d, X %d, Instagram %d, TikTok %d", min(len(youtube), per),
                  min(len(x_posts), per), min(len(reels), per), min(len(tiktok), per))
     return mixed, report

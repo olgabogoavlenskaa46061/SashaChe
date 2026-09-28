@@ -131,14 +131,23 @@ def pick_topics(ed: editor_mod.Editor, hist: dict, limit: int) -> tuple[list, di
     """Темы дня (Claude). По умолчанию — из самых популярных видео за сутки в X, Instagram и на YouTube,
     новости — только для проверки фактов. Если видео нет — из новостей."""
     mix = topic_mix(limit)
-    popular, popular_report = trends.collect()
-    for name, state in popular_report.items():  # видно на странице запуска в GitHub
-        _annotation("warning" if state.startswith("ошибка") else "notice", name, state)
-        github_summary(f"📈 {name}: {state}")
-    stories, report = collector.collect()
-    report.update(popular_report)
     used = history.used_links(hist)
     recent = history.recent_titles(hist)
+    planner = None
+    if config.TOPIC_SOURCE == "viral":
+        def planner(candidates: list) -> list:
+            """Какие моменты дня искать в TikTok — съёмку с трибун именно их."""
+            return ed.tiktok_queries([t for t in candidates if t.url not in used], config.TIKTOK_SEARCHES, recent)
+    popular, popular_report = trends.collect(tiktok_planner=planner)
+    for name, state in popular_report.items():  # видно на странице запуска в GitHub
+        if name == "TikTok поиск":  # GitHub показывает не больше 10 пометок за шаг — пишем вместе с TikTok
+            continue
+        details = popular_report.get("TikTok поиск", "") if name == "TikTok" else ""
+        _annotation("warning" if state.startswith("ошибка") else "notice", name,
+                    f"{state} · {details}" if details else state)
+        github_summary(f"📈 {name}: {state}" + (f" · {details}" if details else ""))
+    stories, report = collector.collect()
+    report.update(popular_report)
 
     if config.TOPIC_SOURCE == "viral":
         fresh = [t for t in popular if t.url not in used]
@@ -191,7 +200,8 @@ def label_footage(ed: editor_mod.Editor, candidates: list, report: dict) -> None
     stands = sorted((t for t in candidates if t.footage == "stands"), key=lambda t: t.views, reverse=True)
     if stands:  # какие видео с трибун нашлись — видно на странице запуска
         _annotation("notice", "Видео с трибун", " || ".join(
-            f"{t.id} {t.platform} · {trends.human_count(t.views)} · {t.title[:90]}" for t in stands[:12]))
+            f"{t.id} {t.platform} · {_when(t.published)} · {trends.human_count(t.views)} · {t.title[:90]}"
+            for t in stands[:12]))
 
 
 def viral_topics(ed: editor_mod.Editor, fresh: list, stories: list, mix: dict[str, int],
@@ -217,9 +227,13 @@ def viral_topics(ed: editor_mod.Editor, fresh: list, stories: list, mix: dict[st
         for _ in range(2):
             if not candidates or sum(left.values()) <= 0:
                 break
-            picked = ed.select_viral(candidates, stories, left, recent, used_links=used, exact=exact,
-                                     stands_round=not exact)
+            # уже выбранные сегодня моменты — как «уже выходили»: второй темы с того же матча не будет
+            today = [f"{sel.item.title[:120]} — {sel.why}" for sel in chosen]
+            picked = ed.select_viral(candidates, stories, left, recent + today, used_links=used, exact=exact,
+                                     stands_round=not exact, context=fresh)
             taken.update(t.url for sel in picked for t in sel.trends)
+            # видео момента, к которому в TikTok нашлась съёмка с трибун, отдельной темой уже не будет
+            taken.update(t.origin for sel in picked for t in sel.trends if getattr(t, "origin", ""))
             for sel in picked:
                 if any(n.link in used for n in sel.item.related):
                     log.info("Пропускаю «%s»: этот матч или событие уже было в роликах", sel.item.title[:80])
@@ -294,6 +308,15 @@ def pin_clip_send(telegram: Telegram, script, clip, reply_to: int) -> None:
     for post in script.popular:
         if post.get("url") == url and media.get("file_id"):
             post["tg_file_id"] = media["file_id"]
+
+
+def _when(published: str) -> str:
+    """«27.09 21:40» по Москве — когда опубликовано видео (для проверки, что момент свежий)."""
+    try:
+        moment = datetime.fromisoformat(str(published).replace("Z", "+00:00"))
+        return moment.astimezone(ZoneInfo(config.TIMEZONE)).strftime("%d.%m %H:%M")
+    except (TypeError, ValueError):
+        return "дата неизвестна"
 
 
 def first_sentence(text: str) -> str:
@@ -496,8 +519,11 @@ def run_scripts(args) -> int:
                         background = "общие кадры стадиона — видео с трибун не скачалось"
                     else:
                         background = "общие кадры стадиона"
+                videos = ", ".join(f"{p.get('platform')} {_when(p.get('published', ''))}"
+                                   + (" с трибун" if p.get("footage") == "stands" else "")
+                                   for p in script.popular)
                 _annotation("notice", f"Тема {number}: {script.hook}",
-                            f"[{script.category}] {script.text} | Фон: {background}")
+                            f"[{script.category}] {script.text} | Видео темы: {videos or '—'} | Фон: {background}")
             github_summary("\n".join(preview))
             log.info("Пробный запуск: в Telegram ничего не отправлено, темы не запомнены")
             return 0
