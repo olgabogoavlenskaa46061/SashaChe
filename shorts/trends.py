@@ -313,7 +313,7 @@ def _tiktok_video_url(item: dict) -> str:
                                                  "videoUrl", "video.playAddr", "videoMeta.playAddr") or "")
 
 
-def _apify_log_tail(message: str, chars: int = 700) -> str:
+def _apify_log_tail(message: str, chars: int = 1500) -> str:
     """Если запуск в Apify упал — хвост его лога, чтобы понять причину."""
     match = re.search(r"run ID: ([A-Za-z0-9]+)", message)
     if not match:
@@ -323,7 +323,7 @@ def _apify_log_tail(message: str, chars: int = 700) -> str:
                                 headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
         lines = [line for line in response.text.splitlines() if line.strip()]
         important = [line for line in lines if re.search(r"ERROR|WARN|error|fail|invalid|required", line)]
-        picked = (important[-5:] or lines[-6:])
+        picked = (important[-5:] or lines[-12:])
         # время в начале строк не нужно — оставляем суть
         picked = [re.sub(r"^\S+Z\s+(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d\s+)?", "", line) for line in picked]
         tail = " | ".join(picked)
