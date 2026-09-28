@@ -313,6 +313,21 @@ def _tiktok_video_url(item: dict) -> str:
                                                  "videoUrl", "video.playAddr", "videoMeta.playAddr") or "")
 
 
+def _apify_log_tail(message: str, chars: int = 400) -> str:
+    """Если запуск в Apify упал — хвост его лога, чтобы понять причину."""
+    match = re.search(r"run ID: ([A-Za-z0-9]+)", message)
+    if not match:
+        return ""
+    try:
+        response = requests.get(f"https://api.apify.com/v2/actor-runs/{match.group(1)}/log", timeout=30,
+                                headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
+        lines = [line for line in response.text.splitlines() if line.strip()]
+        tail = " | ".join(lines[-6:])
+        return f" — лог Apify: {one_line(tail)[-chars:]}" if tail else ""
+    except Exception:
+        return ""
+
+
 def tiktok_popular(hours: int | None = None) -> tuple[list[Trend], int, str]:
     """Свежие популярные футбольные видео TikTok (больше всего — снятых с трибун).
     Возвращает видео, сколько получено строк и пометку для отчёта."""
@@ -328,7 +343,8 @@ def tiktok_popular(hours: int | None = None) -> tuple[list[Trend], int, str]:
     if response.status_code >= 400:
         error = (data or {}).get("error") if isinstance(data, dict) else None
         message = (error or {}).get("message") if isinstance(error, dict) else None
-        raise RuntimeError(f"HTTP {response.status_code}: {one_line(message or response.text[:200])[:200]}")
+        message = one_line(message or response.text[:200])[:200]
+        raise RuntimeError(f"HTTP {response.status_code}: {message}{_apify_log_tail(message)}")
     items = [i for i in (data if isinstance(data, list) else []) if isinstance(i, dict) and not i.get("error")]
     border = datetime.now(timezone.utc) - timedelta(hours=hours or config.TIKTOK_MAX_AGE_HOURS)
     trends: dict[str, Trend] = {}
