@@ -438,25 +438,11 @@ def youtube_hint(error: str) -> str:
 
 
 def tiktok_check() -> str:
-    """Маленькие пробные запросы к сборщикам TikTok (по 3 видео, ≈ $0.001 каждый)."""
-    variants = [("igolaizola~tiktok-scraper", [], ["golazo"]),
-                ("dami_studio~tiktok-scraper", ["gol desde la tribuna"], []),
-                ("dami_studio~tiktok-scraper", [], ["golazo"])]
-    results, ok = [], False
-    for actor, queries, hashtags in variants:
-        what = f"{actor.split('~')[0]} {'поиск' if queries else 'хэштег'}"
-        try:
-            videos, got, note = tiktok_popular(hours=24 * 30, queries=queries, hashtags=hashtags, per_query=3,
-                                               max_videos=3, min_plays=0, max_charge=0.02, actor=actor)
-            with_file = sum(1 for v in videos if v.video_url)
-            results.append(f"✅ {what}: видео {got}, со ссылкой на файл {with_file}{note}")
-            ok = ok or got > 0
-        except Exception as error:
-            results.append(f"❌ {what}: {_safe(error, 300)}")
-    text = " || ".join(results)
-    if not ok:
-        raise RuntimeError(text)
-    return text
+    """Маленький пробный запрос к сборщику TikTok: 3 видео (≈ $0.001)."""
+    videos, got, note = tiktok_popular(hours=24 * 30, queries=["gol desde la tribuna"], hashtags=[], per_query=3,
+                                       max_videos=3, min_plays=0, max_charge=0.02)
+    with_file = sum(1 for v in videos if v.video_url)
+    return f"сборщик TikTok работает (получено видео: {got}, со ссылкой на файл: {with_file}){note}"
 
 
 def x_check() -> str:

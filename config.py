@@ -162,7 +162,7 @@ INSTAGRAM_PRICE_PER_REEL = 0.0026
 
 # TikTok — тоже через Apify (тот же APIFY_TOKEN): там больше всего видео болельщиков с трибун.
 # Ищем по запросам, оставляем свежие (до TIKTOK_MAX_AGE_HOURS) и популярные (от TIKTOK_MIN_PLAYS просмотров).
-TIKTOK_ACTOR = _env("TIKTOK_ACTOR", "igolaizola~tiktok-scraper")
+TIKTOK_ACTOR = _env("TIKTOK_ACTOR", "dami_studio~tiktok-scraper")   # $0.25 за 1000 видео, поиск работает
 TIKTOK_QUERIES = [q.strip() for q in _env(
     "TIKTOK_QUERIES",
     "gol desde la tribuna;golazo desde la grada;hinchada gol;fan view goal stadium;"
@@ -173,7 +173,7 @@ TIKTOK_PER_QUERY = int(_env("TIKTOK_PER_QUERY", "20"))
 TIKTOK_MAX_VIDEOS = int(_env("TIKTOK_MAX_VIDEOS", "150"))   # потолок за запуск (≈ $0.03)
 TIKTOK_MIN_PLAYS = int(_env("TIKTOK_MIN_PLAYS", "20000"))
 TIKTOK_MAX_AGE_HOURS = int(_env("TIKTOK_MAX_AGE_HOURS", "48"))
-TIKTOK_PRICE_PER_VIDEO = 0.0002
+TIKTOK_PRICE_PER_VIDEO = 0.00025
 TIKTOK_MAX_CHARGE_USD = float(_env("TIKTOK_MAX_CHARGE_USD", "0.10"))  # потолок стоимости одного запуска в Apify
 TRENDS_PER_PLATFORM = int(_env("TRENDS_PER_PLATFORM", "25"))  # сколько популярных видео с каждой площадки показывать Claude
 
