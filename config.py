@@ -172,6 +172,7 @@ TIKTOK_MAX_VIDEOS = int(_env("TIKTOK_MAX_VIDEOS", "150"))   # потолок з�
 TIKTOK_MIN_PLAYS = int(_env("TIKTOK_MIN_PLAYS", "20000"))
 TIKTOK_MAX_AGE_HOURS = int(_env("TIKTOK_MAX_AGE_HOURS", "48"))
 TIKTOK_PRICE_PER_VIDEO = 0.0002
+TIKTOK_MAX_CHARGE_USD = float(_env("TIKTOK_MAX_CHARGE_USD", "0.10"))  # потолок стоимости одного запуска в Apify
 TRENDS_PER_PLATFORM = int(_env("TRENDS_PER_PLATFORM", "25"))  # сколько популярных видео с каждой площадки показывать Claude
 
 # Какие видео брать фоном ролика: stands — только снятые болельщиками с трибун (Claude смотрит обложку

@@ -329,7 +329,8 @@ def _apify_log_tail(message: str, chars: int = 400) -> str:
 
 
 def tiktok_popular(hours: int | None = None, queries: list[str] | None = None, per_query: int | None = None,
-                   max_videos: int | None = None, min_plays: int | None = None) -> tuple[list[Trend], int, str]:
+                   max_videos: int | None = None, min_plays: int | None = None,
+                   max_charge: float | None = None) -> tuple[list[Trend], int, str]:
     """Свежие популярные футбольные видео TikTok (больше всего — снятых с трибун).
     Возвращает видео, сколько получено строк и пометку для отчёта."""
     max_videos = max_videos or config.TIKTOK_MAX_VIDEOS
@@ -337,7 +338,10 @@ def tiktok_popular(hours: int | None = None, queries: list[str] | None = None, p
     body = {"searchQueries": queries or config.TIKTOK_QUERIES,
             "maxVideosPerInput": per_query or config.TIKTOK_PER_QUERY, "maxTotalVideos": max_videos}
     response = requests.post(APIFY_RUN.format(actor=config.TIKTOK_ACTOR), json=body, timeout=330,
-                             params={"maxItems": max_videos},
+                             params={"maxItems": max_videos,
+                                     # сборщик берёт плату за события, а не только за видео: без явного
+                                     # потолка в долларах Apify останавливает его сразу после старта
+                                     "maxTotalChargeUsd": max_charge or config.TIKTOK_MAX_CHARGE_USD},
                              headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
     try:
         data = response.json()
@@ -413,7 +417,7 @@ def youtube_hint(error: str) -> str:
 def tiktok_check() -> str:
     """Маленький пробный запрос к сборщику TikTok: 3 видео (≈ $0.001)."""
     videos, got, note = tiktok_popular(hours=24 * 30, queries=["gol desde la tribuna"], per_query=3,
-                                       max_videos=3, min_plays=0)
+                                       max_videos=3, min_plays=0, max_charge=0.02)
     with_file = sum(1 for v in videos if v.video_url)
     return f"сборщик TikTok работает (получено видео: {got}, со ссылкой на файл: {with_file}){note}"
 
