@@ -201,18 +201,24 @@ def from_file(text: str, audio: Path) -> Speech:
     return Speech(audio, duration, estimate_timings(display_tokens(text), 0.1, duration - 0.15), "file")
 
 
+CLEANUP_TIMEOUT = 180  # секунд на обработку голосового (обычно — меньше секунды)
+
+
 def from_human(text: str, source: Path, out: Path) -> Speech:
     """Живой голос (голосовое из Telegram): обрезаем тишину по краям, выравниваем громкость.
     Тайминги слов оцениваются по тексту — они нужны только для необязательных субтитров."""
-    cleanup = (
-        "highpass=f=80,"
-        "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.12,"
-        "areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.25,areverse,"
-        "acompressor=threshold=-20dB:ratio=3:attack=5:release=120:makeup=2,"
-        "loudnorm=I=-15:TP=-1.5:LRA=9"
-    )
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(source), "-af", cleanup,
-                    "-ar", "48000", "-ac", "1", str(out)], check=True)
+    trim = ("silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.12,"
+            "areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.25,areverse,")
+    level = "acompressor=threshold=-20dB:ratio=3:attack=5:release=120:makeup=2,loudnorm=I=-15:TP=-1.5:LRA=9"
+    def clean(filters: str) -> None:
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-nostdin", "-i", str(source), "-af", filters,
+                        "-ar", "48000", "-ac", "1", str(out)], check=True, timeout=CLEANUP_TIMEOUT)
+
+    try:
+        clean("highpass=f=80," + trim + level)
+    except subprocess.TimeoutExpired:
+        # на записи совсем без пауз ffmpeg может зависнуть на обрезке тишины — тогда без неё
+        clean("highpass=f=80," + level)
     duration = probe_duration(out)
     if duration < 2.0:
         raise ValueError("голосовое слишком короткое")
