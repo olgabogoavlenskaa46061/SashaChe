@@ -313,7 +313,7 @@ def _tiktok_video_url(item: dict) -> str:
                                                  "videoUrl", "video.playAddr", "videoMeta.playAddr") or "")
 
 
-def _apify_log_tail(message: str, chars: int = 400) -> str:
+def _apify_log_tail(message: str, chars: int = 700) -> str:
     """Если запуск в Apify упал — хвост его лога, чтобы понять причину."""
     match = re.search(r"run ID: ([A-Za-z0-9]+)", message)
     if not match:
@@ -322,8 +322,12 @@ def _apify_log_tail(message: str, chars: int = 400) -> str:
         response = requests.get(f"https://api.apify.com/v2/actor-runs/{match.group(1)}/log", timeout=30,
                                 headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
         lines = [line for line in response.text.splitlines() if line.strip()]
-        tail = " | ".join(lines[-6:])
-        return f" — лог Apify: {one_line(tail)[-chars:]}" if tail else ""
+        important = [line for line in lines if re.search(r"ERROR|WARN|error|fail|invalid|required", line)]
+        picked = (important[-5:] or lines[-6:])
+        # время в начале строк не нужно — оставляем суть
+        picked = [re.sub(r"^\S+Z\s+(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d\s+)?", "", line) for line in picked]
+        tail = " | ".join(picked)
+        return f" — лог Apify: {one_line(tail)[:chars]}" if tail else ""
     except Exception:
         return ""
 
