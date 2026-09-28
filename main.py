@@ -559,7 +559,8 @@ def run_check(args) -> int:
 
     checks = (("YouTube", "YOUTUBE_API_KEY", config.YOUTUBE_API_KEY, trends.youtube_check, trends.youtube_hint),
               ("X", "X_BEARER_TOKEN", config.X_BEARER_TOKEN, trends.x_check, trends.x_hint),
-              ("Instagram и TikTok", "APIFY_TOKEN", config.APIFY_TOKEN, trends.apify_check, lambda e: ""))
+              ("Instagram и TikTok", "APIFY_TOKEN", config.APIFY_TOKEN, trends.apify_check, lambda e: ""),
+              ("TikTok", "APIFY_TOKEN", config.APIFY_TOKEN, trends.tiktok_check, lambda e: ""))
     for name, secret, value, check, hint in checks:
         if not value:
             add(name, False, f"нет секрета {secret}: проверьте, что название точно «{secret}» и он добавлен "

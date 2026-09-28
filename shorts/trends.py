@@ -328,13 +328,16 @@ def _apify_log_tail(message: str, chars: int = 400) -> str:
         return ""
 
 
-def tiktok_popular(hours: int | None = None) -> tuple[list[Trend], int, str]:
+def tiktok_popular(hours: int | None = None, queries: list[str] | None = None, per_query: int | None = None,
+                   max_videos: int | None = None, min_plays: int | None = None) -> tuple[list[Trend], int, str]:
     """Свежие популярные футбольные видео TikTok (больше всего — снятых с трибун).
     Возвращает видео, сколько получено строк и пометку для отчёта."""
-    body = {"searchQueries": config.TIKTOK_QUERIES, "maxVideosPerInput": config.TIKTOK_PER_QUERY,
-            "maxTotalVideos": config.TIKTOK_MAX_VIDEOS}
+    max_videos = max_videos or config.TIKTOK_MAX_VIDEOS
+    min_plays = config.TIKTOK_MIN_PLAYS if min_plays is None else min_plays
+    body = {"searchQueries": queries or config.TIKTOK_QUERIES,
+            "maxVideosPerInput": per_query or config.TIKTOK_PER_QUERY, "maxTotalVideos": max_videos}
     response = requests.post(APIFY_RUN.format(actor=config.TIKTOK_ACTOR), json=body, timeout=330,
-                             params={"maxItems": config.TIKTOK_MAX_VIDEOS},
+                             params={"maxItems": max_videos},
                              headers={"Authorization": f"Bearer {config.APIFY_TOKEN}"})
     try:
         data = response.json()
@@ -365,7 +368,7 @@ def tiktok_popular(hours: int | None = None) -> tuple[list[Trend], int, str]:
         except ValueError:
             pass
         plays = int(_first(item, "playCount", "stats.playCount") or 0)
-        if plays < config.TIKTOK_MIN_PLAYS:
+        if plays < min_plays:
             continue
         video_url = _tiktok_video_url(item)
         with_file += bool(video_url)
@@ -405,6 +408,14 @@ def youtube_hint(error: str) -> str:
     if "quota" in low:
         return "закончилась дневная квота YouTube — завтра снова заработает"
     return ""
+
+
+def tiktok_check() -> str:
+    """Маленький пробный запрос к сборщику TikTok: 3 видео (≈ $0.001)."""
+    videos, got, note = tiktok_popular(hours=24 * 30, queries=["gol desde la tribuna"], per_query=3,
+                                       max_videos=3, min_plays=0)
+    with_file = sum(1 for v in videos if v.video_url)
+    return f"сборщик TikTok работает (получено видео: {got}, со ссылкой на файл: {with_file}){note}"
 
 
 def x_check() -> str:
