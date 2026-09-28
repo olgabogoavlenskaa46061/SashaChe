@@ -188,6 +188,10 @@ def label_footage(ed: editor_mod.Editor, candidates: list, report: dict) -> None
     report["Обложки"] = state
     _annotation("notice", "Обложки", state)
     github_summary(f"🎥 Обложки: {state}")
+    stands = sorted((t for t in candidates if t.footage == "stands"), key=lambda t: t.views, reverse=True)
+    if stands:  # какие видео с трибун нашлись — видно на странице запуска
+        _annotation("notice", "Видео с трибун", " || ".join(
+            f"{t.id} {t.platform} · {trends.human_count(t.views)} · {t.title[:90]}" for t in stands[:12]))
 
 
 def viral_topics(ed: editor_mod.Editor, fresh: list, stories: list, mix: dict[str, int],
@@ -213,7 +217,8 @@ def viral_topics(ed: editor_mod.Editor, fresh: list, stories: list, mix: dict[st
         for _ in range(2):
             if not candidates or sum(left.values()) <= 0:
                 break
-            picked = ed.select_viral(candidates, stories, left, recent, used_links=used, exact=exact)
+            picked = ed.select_viral(candidates, stories, left, recent, used_links=used, exact=exact,
+                                     stands_round=not exact)
             taken.update(t.url for sel in picked for t in sel.trends)
             for sel in picked:
                 if any(n.link in used for n in sel.item.related):
